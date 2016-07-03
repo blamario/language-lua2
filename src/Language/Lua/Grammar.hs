@@ -10,6 +10,8 @@ import Text.Grampa
 import Language.Lua.Syntax
 import Language.Lua.Parser.Internal (NodeInfo(..))
 
+import Prelude hiding (exp, exponent)
+
 data LuaGrammar a f = LuaGrammar{
    chunk :: f (Block a),
    block :: f (Block a),
@@ -44,7 +46,109 @@ data LuaGrammar a f = LuaGrammar{
    exponent :: f String,
    hexExponent :: f String}
 
-instance Functor1 (LuaGrammar a)
+instance Functor1 (LuaGrammar a) where
+   fmap1 f g = LuaGrammar{
+      chunk = f (chunk g),
+      block = f (block g),
+      stat = f (stat g),
+      retstat = f (retstat g),
+      label = f (label g),
+      funcname = f (funcname g),
+      varlist = f (varlist g),
+      var = f (var g),
+      namelist = f (namelist g),
+      explist = f (explist g),
+      explist1 = f (explist1 g),
+      exp = f (exp g),
+      prefixexp = f (prefixexp g),
+      functioncall = f (functioncall g),
+      args = f (args g),
+      functiondef = f (functiondef g),
+      funcbody = f (funcbody g),
+      parlist = f (parlist g),
+      tableconstructor = f (tableconstructor g),
+      fieldlist = f (fieldlist g),
+      field = f (field g),
+      fieldsep = f (fieldsep g),
+      binop = f (binop g),
+      unop = f (unop g),
+      literalString = f (literalString g),
+      numeral = f (numeral g),
+      name = f (name g),
+      digits = f (digits g),
+      hexDigits = f (hexDigits g),
+      initialHexDigits = f (initialHexDigits g),
+      exponent = f (exponent g),
+      hexExponent = f (exponent g)}
+
+instance Reassemblable (LuaGrammar a) where
+   applyFieldwise f a b = LuaGrammar{
+      chunk = chunk (f b{chunk= chunk a}),
+      block = block (f b{block= block a}),
+      stat = stat (f b{stat= stat a}),
+      retstat = retstat (f b{retstat= retstat a}),
+      label = label (f b{label= label a}),
+      funcname = funcname (f b{funcname= funcname a}),
+      varlist = varlist (f b{varlist= varlist a}),
+      var = var (f b{var= var a}),
+      namelist = namelist (f b{namelist= namelist a}),
+      explist = explist (f b{explist= explist a}),
+      explist1 = explist1 (f b{explist1= explist1 a}),
+      exp = exp (f b{exp= exp a}),
+      prefixexp = prefixexp (f b{prefixexp= prefixexp a}),
+      functioncall = functioncall (f b{functioncall= functioncall a}),
+      args = args (f b{args= args a}),
+      functiondef = functiondef (f b{functiondef= functiondef a}),
+      funcbody = funcbody (f b{funcbody= funcbody a}),
+      parlist = parlist (f b{parlist= parlist a}),
+      tableconstructor = tableconstructor (f b{tableconstructor= tableconstructor a}),
+      fieldlist = fieldlist (f b{fieldlist= fieldlist a}),
+      field = field (f b{field= field a}),
+      fieldsep = fieldsep (f b{fieldsep= fieldsep a}),
+      binop = binop (f b{binop= binop a}),
+      unop = unop (f b{unop= unop a}),
+      literalString = literalString (f b{literalString= literalString a}),
+      numeral = numeral (f b{numeral= numeral a}),
+      name = name (f b{name= name a}),
+      digits = digits (f b{digits= digits a}),
+      hexDigits = hexDigits (f b{hexDigits= hexDigits a}),
+      initialHexDigits = initialHexDigits (f b{initialHexDigits= initialHexDigits a}),
+      exponent = exponent (f b{exponent= exponent a}),
+      hexExponent = exponent (f b{exponent= exponent a})}
+   reassemble f g = LuaGrammar{
+      chunk = f chunk (\x-> g{chunk= x}) g,
+      block = f block (\x-> g{block= x}) g,
+      stat = f stat (\x-> g{stat= x}) g,
+      retstat = f retstat (\x-> g{retstat= x}) g,
+      label = f label (\x-> g{label= x}) g,
+      funcname = f funcname (\x-> g{funcname= x}) g,
+      varlist = f varlist (\x-> g{varlist= x}) g,
+      var = f var (\x-> g{var= x}) g,
+      namelist = f namelist (\x-> g{namelist= x}) g,
+      explist = f explist (\x-> g{explist= x}) g,
+      explist1 = f explist1 (\x-> g{explist1= x}) g,
+      exp = f exp (\x-> g{exp= x}) g,
+      prefixexp = f prefixexp (\x-> g{prefixexp= x}) g,
+      functioncall = f functioncall (\x-> g{functioncall= x}) g,
+      args = f args (\x-> g{args= x}) g,
+      functiondef = f functiondef (\x-> g{functiondef= x}) g,
+      funcbody = f funcbody (\x-> g{funcbody= x}) g,
+      parlist = f parlist (\x-> g{parlist= x}) g,
+      tableconstructor = f tableconstructor (\x-> g{tableconstructor= x}) g,
+      fieldlist = f fieldlist (\x-> g{fieldlist= x}) g,
+      field = f field (\x-> g{field= x}) g,
+      fieldsep = f fieldsep (\x-> g{fieldsep= x}) g,
+      binop = f binop (\x-> g{binop= x}) g,
+      unop = f unop (\x-> g{unop= x}) g,
+      literalString = f literalString (\x-> g{literalString= x}) g,
+      numeral = f numeral (\x-> g{numeral= x}) g,
+      name = f name (\x-> g{name= x}) g,
+      digits = f digits (\x-> g{digits= x}) g,
+      hexDigits = f hexDigits (\x-> g{hexDigits= x}) g,
+      initialHexDigits = f initialHexDigits (\x-> g{initialHexDigits= x}) g,
+      exponent = f exponent (\x-> g{exponent= x}) g,
+      hexExponent = f exponent (\x-> g{exponent= x}) g}
+   
 
 moptional :: (Functor1 g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
 moptional p = p <|> pure mempty
@@ -65,6 +169,10 @@ count :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
 count n p | n > 0 = (:) <$> p <*> count (n-1) p         
           | otherwise = pure []
 
+upto :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
+upto n p | n > 0 = moptional ((:) <$> p <*> upto (n-1) p)
+         | otherwise = pure []
+
 sepBy :: (Functor1 g, MonoidNull t) => Parser g t x -> Parser g t sep -> Parser g t [x]
 sepBy p sep = toList <$> sepBy1 p sep <|> pure []
 
@@ -72,7 +180,7 @@ sepBy1 :: (Functor1 g, MonoidNull t) => Parser g t x -> Parser g t sep -> Parser
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
 node :: MonoidNull t => (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
-node f = pure (f undefined)
+node f = pure (f mempty)
 
 keyword :: (TextualMonoid t, Show t) => t -> Parser (LuaGrammar NodeInfo) t t
 keyword k = spaces *> string k
@@ -215,19 +323,25 @@ grammar LuaGrammar{..} = LuaGrammar{
                               "\"" <$ token "\"" <|>
                               "\'" <$ token "\'" <|>
                               "\n" <$ token "\n" <|>
-                              ((:[]) . chr) <$> (token "d" *> (read <$> ((:) <$> digit <*> ((:) <$> digit <*> ((:[]) <$> digit <|> pure [])))) <|>
-                                       token "x" *> ((fst . head . readHex) <$> count 3 hexDigit)) <|>
+                              ((:[]) . chr) <$> (token "d" *> (read <$> upto 3 digit) <|>
+                                                 token "x" *> ((fst . head . readHex) <$> count 2 hexDigit)) <|>
                               "" <$ token "z" <* skipCharsWhile isSpace)
                        digit = satisfyChar isDigit
                        hexDigit = satisfyChar isHexDigit
-                       literalWith quote = char quote *> concatMany (escapeSequence <|> takeCharsWhile (\c-> c /= '\'' && c /= quote)) <* char quote
-                   in 
-                      literalWith '"' <|> literalWith '\'' <|>
+                       literalWith quote = char quote 
+                                           *> concatMany (escapeSequence <|>
+                                                          takeCharsWhile1 (\c-> c /= '\'' && c /= quote)) 
+                                           <* char quote
+                   in literalWith '"' <|> literalWith '\'' <|>
                       do token "["
                          equalSigns <- takeCharsWhile (== '=')
                          token "["
                          optional (token "\n")
-                         many (notFollowedBy (do token "]"
-                                                 string equalSigns
-                                                 token "]")
-                               *> satisfyChar (const True))}
+                         let terminator = do token "]"
+                                             string equalSigns
+                                             token "]"
+                         s <- many (notFollowedBy terminator
+                                    *> satisfyChar (const True))
+                         terminator
+                         return s
+   }
