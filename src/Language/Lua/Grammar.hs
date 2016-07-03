@@ -214,7 +214,7 @@ grammar LuaGrammar{..} = LuaGrammar{
    funcname = node FunctionName <*> (node IdentList1 <*> sepBy1 name (string ".")) <*> optional (string ":" *> name),
    varlist = node VariableList1 <*> sepBy1 var (string ","),
    var = node VarIdent <*> name <|> 
-         node VarField <*> prefixexp <* string "[" <*> exp <* string "]" <|> 
+         recursive (node VarField <*> prefixexp) <* string "[" <*> exp <* string "]" <|> 
          node VarFieldName <*> prefixexp <* string "." <*> name,
    
    namelist = node IdentList1 <*> sepBy1 name (string ","),
@@ -234,13 +234,13 @@ grammar LuaGrammar{..} = LuaGrammar{
          node Unop <*> unop <*> exp,
 
    prefixexp = 
-      node PrefixVar <*> var <|>
-      node PrefixFunCall <*> functioncall <|>
+      recursive (node PrefixVar <*> var) <|>
+      recursive (node PrefixFunCall <*> functioncall) <|>
       node Parens <* string "(" <*> exp <* string ")",
 
    functioncall =  
-      node FunctionCall <*> prefixexp <*> args <|>
-      node MethodCall <*> prefixexp <* string ":" <*> name <*> args,
+      recursive (node FunctionCall <*> prefixexp) <*> args <|>
+      recursive (node MethodCall <*> prefixexp) <* string ":" <*> name <*> args,
 
    args =  
       node Args <* string "(" <*> explist <* string ")" <|>
