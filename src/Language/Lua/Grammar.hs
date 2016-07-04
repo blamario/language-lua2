@@ -38,6 +38,8 @@ data LuaGrammar a f = LuaGrammar{
    binop :: f (Binop a),
    unop :: f (Unop a),
    literalString :: f String,
+   longBracket :: f String,
+   comment :: f String,
    numeral :: f (Expression a),
    name :: f (Ident a),
    digits :: f String,
@@ -73,6 +75,8 @@ instance Functor1 (LuaGrammar a) where
       binop = f (binop g),
       unop = f (unop g),
       literalString = f (literalString g),
+      longBracket = f (longBracket g),
+      comment = f (comment g),
       numeral = f (numeral g),
       name = f (name g),
       digits = f (digits g),
@@ -108,6 +112,8 @@ instance Reassemblable (LuaGrammar a) where
       binop = binop (f b{binop= binop a}),
       unop = unop (f b{unop= unop a}),
       literalString = literalString (f b{literalString= literalString a}),
+      longBracket = longBracket (f b{longBracket= longBracket a}),
+      comment = comment (f b{comment= comment a}),
       numeral = numeral (f b{numeral= numeral a}),
       name = name (f b{name= name a}),
       digits = digits (f b{digits= digits a}),
@@ -141,6 +147,8 @@ instance Reassemblable (LuaGrammar a) where
       binop = f binop (\x-> g{binop= x}) g,
       unop = f unop (\x-> g{unop= x}) g,
       literalString = f literalString (\x-> g{literalString= x}) g,
+      longBracket = f longBracket (\x-> g{longBracket= x}) g,
+      comment= f comment (\x-> g{comment= x}) g,
       numeral = f numeral (\x-> g{numeral= x}) g,
       name = f name (\x-> g{name= x}) g,
       digits = f digits (\x-> g{digits= x}) g,
@@ -159,8 +167,14 @@ concatMany p = moptional (p <> concatMany p)
 skip :: Parser g t x -> Parser g t ()
 skip = (() <$)
 
+skipMany :: (Functor1 g, MonoidNull t) => Parser g t x -> Parser g t ()
+skipMany p = moptional (p *> skipMany p)
+
 spaces :: (Functor1 g, TextualMonoid t) => Parser g t ()
 spaces = skipCharsWhile isSpace
+
+ignorable :: Parser (LuaGrammar NodeInfo) String ()
+ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
 
 char :: (Functor1 g, TextualMonoid t) => Char -> Parser g t Char
 char = satisfyChar . (==)
@@ -182,18 +196,23 @@ sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 node :: MonoidNull t => (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
 node f = pure (f mempty)
 
-keyword :: (TextualMonoid t, Show t) => t -> Parser (LuaGrammar NodeInfo) t t
-keyword k = spaces *> string k
+keyword :: String -> Parser (LuaGrammar NodeInfo) String String
+keyword k = ignorable *> string k <* notFollowedBy (satisfyChar isAlphaNum)
+
+symbol :: String -> Parser (LuaGrammar NodeInfo) String String
+symbol k = ignorable *> string k
 
 toExpList :: ExpressionList1 a -> ExpressionList a
 toExpList (ExpressionList1 a l) = ExpressionList a (toList l)
 
+luaGrammar = fixGrammar grammar
+
 grammar :: GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) String
 grammar LuaGrammar{..} = LuaGrammar{
-   chunk = block,
+   chunk = block <* ignorable,
    block = node Block <*> many stat <*> optional retstat,
-   stat = node EmptyStmt <* string ";" <|>
-          node Assign <*> varlist <* string "=" <*> explist1 <|>
+   stat = node EmptyStmt <* symbol ";" <|>
+          node Assign <*> varlist <* symbol "=" <*> explist1 <|>
           node FunCall <*> functioncall <|>
           node Label <*> label <|>
           node Break <* keyword "break" <|>
@@ -201,32 +220,37 @@ grammar LuaGrammar{..} = LuaGrammar{
           node Do <* keyword "do" <*> block <* keyword "end" <|>
           node While <* keyword "while" <*> exp <* keyword "do" <*> block <* keyword "end" <|>
           node Repeat <* keyword "repeat" <*> block <* keyword "until" <*> exp <|>
-          node If <* keyword "if" <*> ((:|) <$> ((,) <$> exp <* keyword "then" <*> block) <*> many ((,) <$ keyword "elseif" <*> exp <* keyword "then" <*> block)) <*> optional (keyword "else" *> block) <* keyword "end" <|>
-          node For <* keyword "for" <*> name <* string "=" <*> exp <* string "," <*> exp <*> optional (string "," *> exp) <* keyword "do" <*> block <* keyword "end" <|>
-          node ForIn <* keyword "for" <*> namelist <* keyword "in" <*> explist1 <* keyword "do" <*> block <* keyword "end" <|>
+          node If <* keyword "if" <*> ((:|) <$> ((,) <$> exp <* keyword "then" <*> block) 
+                                       <*> many ((,) <$ keyword "elseif" <*> exp <* keyword "then" <*> block)) 
+                  <*> optional (keyword "else" *> block) <* keyword "end" <|>
+          node For <* keyword "for" <*> name <* symbol "="
+                   <*> exp <* symbol "," <*> exp <*> optional (symbol "," *> exp)
+                   <* keyword "do" <*> block <* keyword "end" <|>
+          node ForIn <* keyword "for" <*> namelist <* keyword "in" <*> explist1 
+                     <* keyword "do" <*> block <* keyword "end" <|>
           node FunAssign <* keyword "function" <*> funcname <*> funcbody <|>
           node LocalFunAssign <* keyword "local" <* keyword "function" <*> name <*> funcbody <|>
-          node LocalAssign <* keyword "local" <*> namelist <*> (string "=" *> (toExpList <$> explist1) 
+          node LocalAssign <* keyword "local" <*> namelist <*> (symbol "=" *> (toExpList <$> explist1)
                                                                 <|> node ExpressionList <*> pure []),
 
-   retstat = node ReturnStatement <* keyword "return" <*> explist <* optional (string ";"),
-   label = string "::" *> name <* string "::",
-   funcname = node FunctionName <*> (node IdentList1 <*> sepBy1 name (string ".")) <*> optional (string ":" *> name),
-   varlist = node VariableList1 <*> sepBy1 var (string ","),
+   retstat = node ReturnStatement <* keyword "return" <*> explist <* optional (symbol ";"),
+   label = symbol "::" *> name <* symbol "::",
+   funcname = node FunctionName <*> (node IdentList1 <*> sepBy1 name (symbol ".")) <*> optional (symbol ":" *> name),
+   varlist = node VariableList1 <*> sepBy1 var (symbol ","),
    var = node VarIdent <*> name <|> 
-         recursive (node VarField <*> prefixexp) <* string "[" <*> exp <* string "]" <|> 
-         node VarFieldName <*> prefixexp <* string "." <*> name,
+         recursive (node VarField <*> prefixexp) <* symbol "[" <*> exp <* symbol "]" <|> 
+         recursive (node VarFieldName <*> prefixexp) <* symbol "." <*> name,
    
-   namelist = node IdentList1 <*> sepBy1 name (string ","),
-   explist = node ExpressionList <*> sepBy exp (string ","),
-   explist1 = node ExpressionList1 <*> sepBy1 exp (string ","),
+   namelist = node IdentList1 <*> sepBy1 name (symbol ","),
+   explist = node ExpressionList <*> sepBy exp (symbol ","),
+   explist1 = node ExpressionList1 <*> sepBy1 exp (symbol ","),
 
    exp = node Nil <* keyword "nil" <|>
          node Bool <*> pure False <* keyword "false" <|>
          node Bool <*> pure True <* keyword "true" <|>
          numeral <|>
          node String <*> literalString <|>
-         node Vararg <* string "..." <|>
+         node Vararg <* symbol "..." <|>
          node FunDef <*> functiondef <|>
          node PrefixExp <*> prefixexp <|>
          node TableCtor <*> tableconstructor <|>
@@ -234,67 +258,68 @@ grammar LuaGrammar{..} = LuaGrammar{
          node Unop <*> unop <*> exp,
 
    prefixexp = 
-      recursive (node PrefixVar <*> var) <|>
+      node PrefixVar <*> var <|>
       recursive (node PrefixFunCall <*> functioncall) <|>
-      node Parens <* string "(" <*> exp <* string ")",
+      node Parens <* symbol "(" <*> exp <* symbol ")",
 
    functioncall =  
-      recursive (node FunctionCall <*> prefixexp) <*> args <|>
-      recursive (node MethodCall <*> prefixexp) <* string ":" <*> name <*> args,
+      node FunctionCall <*> prefixexp <*> args <|>
+      node MethodCall <*> prefixexp <* symbol ":" <*> name <*> args,
 
    args =  
-      node Args <* string "(" <*> explist <* string ")" <|>
+      node Args <* symbol "(" <*> explist <* symbol ")" <|>
       node ArgsTable <*> tableconstructor <|>
       node ArgsString <*> literalString ,
 
    functiondef = keyword "function" *> funcbody,
 
-   funcbody = node FunctionBody <* string "(" <*> optional parlist <* string ")" <*> block <* keyword "end",
+   funcbody = node FunctionBody <* symbol "(" <*> optional parlist <* symbol ")" <*> block <* keyword "end",
 
    parlist = 
-      node ParamList <*> namelist <*> (True <$ string "," <* string "..." <|> pure False) <|> 
-      node ParamListVararg <* string "...",
+      node ParamList <*> namelist <*> (True <$ symbol "," <* symbol "..." <|> pure False) <|> 
+      node ParamListVararg <* symbol "...",
 
-   tableconstructor = node TableConstructor <* string "{" <*> fieldlist <* string "}",
+   tableconstructor = node TableConstructor <* symbol "{" <*> fieldlist <* symbol "}",
 
    fieldlist = node FieldList <*> sepBy field fieldsep,
    field = 
-      node FieldExp <* string "[" <*> exp <* string "]" <* string "=" <*> exp <|>
-      node FieldIdent <*> name <* string "=" <*> exp <|>
+      node FieldExp <* symbol "[" <*> exp <* symbol "]" <* symbol "=" <*> exp <|>
+      node FieldIdent <*> name <* symbol "=" <*> exp <|>
       node Field <*> exp,
 
-   fieldsep = skip (string "," <|> string ";"),
+   fieldsep = skip (symbol "," <|> symbol ";"),
 
    binop =  
-      node Plus       <* string "+"    <|>
-      node Minus      <* string "-"    <|> 
-      node Mult       <* string "*"    <|>
-      node FloatDiv   <* string "/"    <|>
-      node FloorDiv   <* string "//"   <|>
-      node Exponent   <* string "^"    <|>
-      node Modulo     <* string "%"    <|>
-      node BitwiseAnd <* string "&"    <|>
-      node BitwiseXor <* string "~"    <|>
-      node BitwiseOr  <* string "|"    <|>
-      node Rshift     <* string ">>"   <|>
-      node Lshift     <* string "<<"   <|>
-      node Concat     <* string ".."   <|>
-      node Lt         <* string "<"    <|>
-      node Leq        <* string "<="   <|>
-      node Gt         <* string ">"    <|>
-      node Geq        <* string ">="   <|>
-      node Eq         <* string "=="   <|>
-      node Neq        <* string "~="   <|>
+      node Plus       <* symbol "+"    <|>
+      node Minus      <* symbol "-"    <|> 
+      node Mult       <* symbol "*"    <|>
+      node FloatDiv   <* symbol "/"    <|>
+      node FloorDiv   <* symbol "//"   <|>
+      node Exponent   <* symbol "^"    <|>
+      node Modulo     <* symbol "%"    <|>
+      node BitwiseAnd <* symbol "&"    <|>
+      node BitwiseXor <* symbol "~"    <|>
+      node BitwiseOr  <* symbol "|"    <|>
+      node Rshift     <* symbol ">>"   <|>
+      node Lshift     <* symbol "<<"   <|>
+      node Concat     <* symbol ".."   <|>
+      node Lt         <* symbol "<"    <|>
+      node Leq        <* symbol "<="   <|>
+      node Gt         <* symbol ">"    <|>
+      node Geq        <* symbol ">="   <|>
+      node Eq         <* symbol "=="   <|>
+      node Neq        <* symbol "~="   <|>
       node And        <* keyword "and" <|>
       node Or         <* keyword "or",
 
    unop = 
-      node Negate     <* string "-"    <|>
+      node Negate     <* symbol "-"    <|>
       node Not        <* keyword "not" <|>
-      node Length     <* string "#"    <|>
-      node BitwiseNot <* string "~",
+      node Length     <* symbol "#"    <|>
+      node BitwiseNot <* symbol "~",
 
-   numeral = (node Integer <*> digits <|>
+   numeral = ignorable *> 
+             (node Integer <*> digits <|>
               node Float <*> (digits <> token "." <> digits <> moptional exponent) <|>
               node Float <*> (digits <> exponent) <|>
               node Integer <*> initialHexDigits <|>
@@ -306,11 +331,13 @@ grammar LuaGrammar{..} = LuaGrammar{
    initialHexDigits = token "0x" <> hexDigits,
    exponent = (token "e" <|> token "E") <> moptional (token "+" <|> token "-") <> digits,
    hexExponent = (token "p" <|> token "P") <> moptional (token "+" <|> token "-") <> digits,
-   name = let isStartChar c = isLetter c || c == '_'
+   name = ignorable *>
+          let isStartChar c = isLetter c || c == '_'
               isNameChar c = isStartChar c || isDigit c
           in node Ident <*> ((:) <$> satisfyChar isStartChar <*> many (satisfyChar isNameChar)) 
              <* notFollowedBy (satisfyChar isNameChar),
-   literalString = let escapeSequence = 
+   literalString = ignorable *>
+                   let escapeSequence = 
                           token "\\" 
                           *> ("\\" <$ token "\\" <|>
                               "\a" <$ token "a" <|>
@@ -332,16 +359,17 @@ grammar LuaGrammar{..} = LuaGrammar{
                                            *> concatMany (escapeSequence <|>
                                                           takeCharsWhile1 (\c-> c /= '\'' && c /= quote)) 
                                            <* char quote
-                   in literalWith '"' <|> literalWith '\'' <|>
-                      do token "["
-                         equalSigns <- takeCharsWhile (== '=')
-                         token "["
-                         optional (token "\n")
-                         let terminator = do token "]"
-                                             string equalSigns
-                                             token "]"
-                         s <- many (notFollowedBy terminator
-                                    *> satisfyChar (const True))
-                         terminator
-                         return s
+                   in literalWith '"' <|> 
+                      literalWith '\'' <|> 
+                      longBracket,
+   longBracket = do token "["
+                    equalSigns <- takeCharsWhile (== '=')
+                    token "["
+                    optional (token "\n")
+                    let terminator = do token "]"
+                                        string equalSigns
+                                        token "]"
+                    many (notFollowedBy terminator
+                          *> satisfyChar (const True)) <* terminator,
+   comment = string "--" *> (takeCharsWhile (/= '\n') <* (skip (char '\n') <|> endOfInput) <|> longBracket)
    }
