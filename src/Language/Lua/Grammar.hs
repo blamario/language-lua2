@@ -2,6 +2,7 @@
 module Language.Lua.Grammar where
 
 import Control.Applicative
+import Control.Monad (guard)
 import Data.Char (chr, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.List.NonEmpty (NonEmpty(..), toList)
@@ -394,12 +395,18 @@ symbol s = ignorable *> string s
 toExpList :: ExpressionList1 a -> ExpressionList a
 toExpList (ExpressionList1 a l) = ExpressionList a (toList l)
 
+-- Section 3.1
+reservedKeywords = ["and", "break", "do", "else", "elseif", "end",
+                    "false", "for", "function", "goto", "if", "in",
+                    "local", "nil", "not", "or", "repeat", "return",
+                    "then", "true", "until", "while"]
+
 luaGrammar :: Grammar (LuaGrammar NodeInfo) String
 luaGrammar = fixGrammar grammar
 
 grammar :: GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) String
 grammar LuaGrammar{..} = LuaGrammar{
-   chunk = block <* ignorable,
+   chunk = block <* ignorable <* endOfInput,
    block = node Block <*> many stat <*> optional retstat,
    stat = node EmptyStmt <* symbol ";" <|>
           node Assign <*> varlist <* symbol "=" <*> explist1 <|>
@@ -521,11 +528,13 @@ grammar LuaGrammar{..} = LuaGrammar{
    initialHexDigits = token "0x" <> hexDigits,
    exponent = (token "e" <|> token "E") <> moptional (token "+" <|> token "-") <> digits,
    hexExponent = (token "p" <|> token "P") <> moptional (token "+" <|> token "-") <> digits,
-   name = ignorable *>
-          let isStartChar c = isLetter c || c == '_'
-              isNameChar c = isStartChar c || isDigit c
-          in node Ident <*> ((:) <$> satisfyChar isStartChar <*> many (satisfyChar isNameChar))
-             <* notFollowedBy (satisfyChar isNameChar),
+   name = do ignorable
+             let isStartChar c = isLetter c || c == '_'
+                 isNameChar c = isStartChar c || isDigit c
+             identifier <- ((:) <$> satisfyChar isStartChar <*> many (satisfyChar isNameChar))
+                           <* notFollowedBy (satisfyChar isNameChar)
+             guard (notElem identifier reservedKeywords)
+             node Ident <*> pure identifier,
    literalString = ignorable *>
                    let escapeSequence = 
                           token "\\" 
@@ -547,7 +556,7 @@ grammar LuaGrammar{..} = LuaGrammar{
                        hexDigit = satisfyChar isHexDigit
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>
-                                                          takeCharsWhile1 (\c-> c /= '\'' && c /= quote)) 
+                                                          takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
                                            <* char quote
                    in literalWith '"' <|> 
                       literalWith '\'' <|> 
