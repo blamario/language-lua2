@@ -691,7 +691,10 @@ grammar LuaGrammar{..} = LuaGrammar{
                    in literalWith '"' <|> 
                       literalWith '\'' <|> 
                       string "!" *> longBracket,
-   longBracket = do equalSigns <- token "[" *> takeCharsWhile (== '=') <* token "[" <* optional (token "\n")
+   longBracket = do token "["
+                    equalSigns <- takeCharsWhile (== '=')
+                    token "["
+                    skip (token "\n") <|> notFollowedBy (token "\n")
                     let terminator = token "]" *> string equalSigns *> token "]"
                     many (notFollowedBy terminator
                           *> satisfyChar (const True)) <* terminator,
