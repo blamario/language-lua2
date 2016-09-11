@@ -1,4 +1,4 @@
-{-# Language RecordWildCards #-}
+{-# Language OverloadedStrings, RecordWildCards #-}
 module Language.Lua.Grammar where
 
 import Control.Applicative
@@ -7,6 +7,7 @@ import Data.Char (chr, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.List.NonEmpty (NonEmpty(..), toList)
 import Data.Monoid ((<>))
+import Data.Monoid.Textual (toString)
 import Numeric (readHex)
 import Text.Grampa
 import Language.Lua.Syntax
@@ -459,11 +460,14 @@ skipMany p = moptional (p *> skipMany p)
 spaces :: (Functor1 g, TextualMonoid t) => Parser g t ()
 spaces = skipCharsWhile isSpace
 
-ignorable :: Parser (LuaGrammar NodeInfo) String ()
+ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
 ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
 
 char :: (Functor1 g, TextualMonoid t) => Char -> Parser g t Char
 char = satisfyChar . (==)
+
+chars :: (Functor1 g, TextualMonoid t) => [Char] -> Parser g t [Char]
+chars = mapM char
 
 count :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
 count n p | n > 0 = (:) <$> p <*> count (n-1) p         
@@ -482,10 +486,10 @@ sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 node :: MonoidNull t => (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
 node f = pure (f mempty)
 
-keyword :: String -> Parser (LuaGrammar NodeInfo) String String
+keyword :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
 keyword k = ignorable *> string k <* notFollowedBy (satisfyChar isAlphaNum)
 
-symbol :: String -> Parser (LuaGrammar NodeInfo) String String
+symbol :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
 symbol s = ignorable *> string s
 
 toExpList :: ExpressionList1 a -> ExpressionList a
@@ -498,10 +502,10 @@ reservedKeywords = ["and", "break", "do", "else", "elseif", "end",
                     "local", "nil", "not", "or", "repeat", "return",
                     "then", "true", "until", "while"]
 
-luaGrammar :: Grammar (LuaGrammar NodeInfo) String
+luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) t
 luaGrammar = fixGrammar grammar
 
-grammar :: GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) String
+grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) t
 grammar LuaGrammar{..} = LuaGrammar{
    chunk = block <* ignorable <* endOfInput,
    block = node Block <*> many stat <*> optional retstat,
@@ -645,19 +649,19 @@ grammar LuaGrammar{..} = LuaGrammar{
       node Length     <* symbol "#"    <|>
       node BitwiseNot <* symbol "~",
 
-   numeral = ignorable *> 
+   numeral = ignorable *>
              (node Integer <*> digits <|>
-              node Float <*> (digits <> token "." <> digits <> moptional exponent) <|>
+              node Float <*> (digits <> chars "." <> digits <> moptional exponent) <|>
               node Float <*> (digits <> exponent) <|>
               node Integer <*> initialHexDigits <|>
-              node Float <*> (initialHexDigits <> token "." <> hexDigits <> moptional hexExponent) <|>
+              node Float <*> (initialHexDigits <> chars "." <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
              <* notFollowedBy (satisfyChar isAlphaNum),
    digits = some (satisfyChar isDigit),
    hexDigits = some (satisfyChar isHexDigit),
-   initialHexDigits = token "0x" <> hexDigits,
-   exponent = (token "e" <|> token "E") <> moptional (token "+" <|> token "-") <> digits,
-   hexExponent = (token "p" <|> token "P") <> moptional (token "+" <|> token "-") <> digits,
+   initialHexDigits = chars "0x" <> hexDigits,
+   exponent = (chars "e" <|> chars "E") <> moptional (chars "+" <|> chars "-") <> digits,
+   hexExponent = (chars "p" <|> chars "P") <> moptional (chars "+" <|> chars "-") <> digits,
    name = do ignorable
              let isStartChar c = isLetter c || c == '_'
                  isNameChar c = isStartChar c || isDigit c
@@ -686,19 +690,20 @@ grammar LuaGrammar{..} = LuaGrammar{
                        hexDigit = satisfyChar isHexDigit
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>
-                                                          takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
+                                                          toString (const "") <$> takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
                                            <* char quote
                    in literalWith '"' <|> 
                       literalWith '\'' <|> 
                       string "!" *> longBracket,
-   longBracket = do token "["
+   longBracket = do skip (token "[")
                     equalSigns <- takeCharsWhile (== '=')
-                    token "["
+                    skip (token "[")
                     skip (token "\n") <|> notFollowedBy (token "\n")
                     let terminator = token "]" *> string equalSigns *> token "]"
                     many (notFollowedBy terminator
                           *> satisfyChar (const True)) <* terminator,
-   comment = string "--" *> (takeCharsWhile (/= '\n') <* (skip (char '\n') <|> endOfInput) <|> longBracket)
+   comment = string "--" *> (toString (const "") <$> takeCharsWhile (/= '\n') <* (skip (char '\n') <|> endOfInput) <|>
+                             longBracket)
    }
 
 traceRest :: Functor1 g => String -> Parser g String ()
