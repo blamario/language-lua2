@@ -12,16 +12,21 @@ import Language.Lua.Pretty
 import Language.Lua.Syntax
 import Language.Lua.Token
 
+import Language.Lua.Grammar
+import Text.Grampa (parseAll)
+
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative ((<$))
 #endif
 import           Control.DeepSeq       (rnf)
 import           Control.Exception     (evaluate)
+import           Data.List             (isSuffixOf)
 import qualified Data.List.NonEmpty    as NE
 import           Data.Loc
 import           Data.Monoid
 import qualified Data.Sequence         as Seq
 import           Test.QuickCheck
+import           System.Directory (listDirectory)
 import           Test.Tasty
 import           Test.Tasty.HUnit
 import qualified Test.Tasty.QuickCheck as QC
@@ -30,6 +35,7 @@ main :: IO ()
 main = defaultMain $ testGroup "tests"
   [ lexerTests
   , parserTests
+  , grammarTests
   -- , prettyTests
   ]
 
@@ -206,9 +212,88 @@ parserTests = testGroup "parser tests"
  where
   l :: String -> [L Token]
   l = streamToList . runLexer luaLexer ""
+  parseFile :: String -> IO ()
+  parseFile file = readFile file >>= evaluate . rnf . parseLua file
 
-parseFile :: String -> IO ()
-parseFile file = readFile file >>= evaluate . rnf . parseLua file
+grammarTests :: TestTree
+grammarTests = testGroup "grammar tests"
+  [ testCase "sepBy 0" $ do
+      [] @?= parseAll luaGrammar namelist ""
+  , testCase "sepBy 1" $ do
+      let [is] = parseAll luaGrammar namelist ("hi" :: String)
+          loc1 = NoLoc
+      is @?= IdentList1 (NodeInfo loc1 mempty)
+                        [Ident (NodeInfo loc1 mempty) "hi"]
+  , testCase "sepBy 2" $ do
+      let [is] = parseAll luaGrammar namelist "hi,ho"
+          loc1 = NoLoc -- "hi"
+          loc2 = NoLoc -- ","
+          loc3 = NoLoc -- "ho"
+      is @?= IdentList1 (NodeInfo loc1 mempty)
+                        [ Ident (NodeInfo loc1 mempty) "hi"
+                        , Ident (NodeInfo loc3 mempty) "ho"
+                        ]
+  , testCase "sepBy 3" $ do
+      let [is] = parseAll luaGrammar namelist "hi,ho,ha"
+          loc1 = NoLoc -- "hi"
+          loc2 = NoLoc -- ","
+          loc3 = NoLoc -- "ho"
+          loc4 = NoLoc -- ","
+          loc5 = NoLoc -- "ha"
+      is @?= IdentList1 (NodeInfo loc1 mempty)
+                        [ Ident (NodeInfo loc1 mempty) "hi"
+                        , Ident (NodeInfo loc3 mempty) "ho"
+                        , Ident (NodeInfo loc5 mempty) "ha"
+                        ]
+  , testCase "field list 1" $ do
+      let [fs] = parseAll luaGrammar fieldlist "[\"a\"]=b"
+          loc1 = NoLoc -- "["
+          loc2 = NoLoc -- '"a"'
+          loc3 = NoLoc -- "]"
+          loc4 = NoLoc -- "="
+          loc5 = NoLoc -- "b"
+          info = NodeInfo loc1 mempty
+          a_info = NodeInfo loc2 mempty
+          b_info = NodeInfo loc5 mempty
+
+      fs @?= FieldList info [ FieldExp info
+                                       (String a_info "a")
+                                       (PrefixExp b_info
+                                        (PrefixVar b_info
+                                         (VarIdent b_info
+                                          (Ident b_info "b")))) ]
+
+  , testCase "param list" $ do
+      let [p] = parseAll luaGrammar parlist "..."
+          loc = NoLoc
+      p @?= ParamListVararg (NodeInfo loc mempty)
+
+  , testCase "param list 2" $ do
+      let [p] = parseAll luaGrammar parlist "foo, bar"
+          loc1 = NoLoc
+          loc2 = NoLoc
+          loc3 = NoLoc
+          info = NodeInfo loc1 mempty
+      p @?= ParamList info (IdentList1 info [ Ident (NodeInfo loc1 mempty) "foo"
+                                            , Ident (NodeInfo loc3 mempty) "bar"
+                                            ])
+                           False
+
+    , testCase "parse 1.lua" (parseFile "test/samples/1.lua")
+    , testCase "parse 2.lua" (parseFile "test/samples/2.lua")
+    , testCaseSteps "Lua 5.3.3 test suite" (testDir "test/lua-5.3.3-tests/")
+--    , buildTest (testGroup "Lua 5.3.3 test suite" <$> testDir "test/lua-5.3.3-tests/")
+    ]
+ where
+    testDir dirName step = listDirectory dirName >>= mapM_ testFile
+       where testFile fileName
+                | ".lua" `isSuffixOf` fileName = step fileName >> parseFile (dirName <> fileName)
+                | otherwise = return ()
+--    testDir dirName = testFile <$> listDirectory dirName
+    testFile fileName
+       | ".lua" `isSuffixOf` fileName = testCase fileName (parseFile fileName)
+    parseFile :: String -> IO ()
+    parseFile file = readFile file >>= evaluate . rnf . parseAll luaGrammar chunk
 
 luaToString :: Chunk () -> String
 luaToString c = displayS (renderPretty 1.0 80 (pretty c)) ""
