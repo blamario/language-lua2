@@ -2,7 +2,7 @@
 module Language.Lua.Grammar where
 
 import Control.Applicative
-import Control.Monad (guard)
+import Control.Monad (guard, void)
 import Data.Char (chr, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.List.NonEmpty (NonEmpty(..), toList)
@@ -12,6 +12,9 @@ import Numeric (readHex)
 import Text.Grampa
 import Language.Lua.Syntax
 import Language.Lua.Parser.Internal (NodeInfo(..))
+import Text.Parser.Char (char, spaces)
+import Text.Parser.Combinators (count, sepBy, skipMany)
+import qualified Text.Parser.Char as P
 
 import Debug.Trace (trace)
 
@@ -451,34 +454,12 @@ moptional p = p <|> pure mempty
 concatMany :: (Functor1 g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
 concatMany p = moptional (p <> concatMany p)
 
-skip :: Parser g t x -> Parser g t ()
-skip = (() <$)
-
-skipMany :: (Functor1 g, MonoidNull t) => Parser g t x -> Parser g t ()
-skipMany p = moptional (p *> skipMany p)
-
-spaces :: (Functor1 g, TextualMonoid t) => Parser g t ()
-spaces = skipCharsWhile isSpace
-
 ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
 ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
-
-char :: (Functor1 g, TextualMonoid t) => Char -> Parser g t Char
-char = satisfyChar . (==)
-
-chars :: (Functor1 g, TextualMonoid t) => [Char] -> Parser g t [Char]
-chars = mapM char
-
-count :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
-count n p | n > 0 = (:) <$> p <*> count (n-1) p         
-          | otherwise = pure []
 
 upto :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
 upto n p | n > 0 = moptional ((:) <$> p <*> upto (n-1) p)
          | otherwise = pure []
-
-sepBy :: Monoid t => Parser g t x -> Parser g t sep -> Parser g t [x]
-sepBy p sep = toList <$> sepBy1 p sep <|> pure []
 
 sepBy1 :: Monoid t => Parser g t x -> Parser g t sep -> Parser g t (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
@@ -618,7 +599,7 @@ grammar LuaGrammar{..} = LuaGrammar{
       node FieldIdent <*> name <* symbol "=" <*> exp <|>
       node Field <*> exp,
 
-   fieldsep = skip (symbol "," <|> symbol ";"),
+   fieldsep = void (symbol "," <|> symbol ";"),
 
    binop =
       node Plus       <* symbol "+"    <|>
@@ -651,17 +632,17 @@ grammar LuaGrammar{..} = LuaGrammar{
 
    numeral = ignorable *>
              (node Integer <*> digits <|>
-              node Float <*> (digits <> chars "." <> digits <> moptional exponent) <|>
+              node Float <*> (digits <> P.string "." <> digits <> moptional exponent) <|>
               node Float <*> (digits <> exponent) <|>
               node Integer <*> initialHexDigits <|>
-              node Float <*> (initialHexDigits <> chars "." <> hexDigits <> moptional hexExponent) <|>
+              node Float <*> (initialHexDigits <> P.string "." <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
              <* notFollowedBy (satisfyChar isAlphaNum),
    digits = some (satisfyChar isDigit),
    hexDigits = some (satisfyChar isHexDigit),
-   initialHexDigits = chars "0x" <> hexDigits,
-   exponent = (chars "e" <|> chars "E") <> moptional (chars "+" <|> chars "-") <> digits,
-   hexExponent = (chars "p" <|> chars "P") <> moptional (chars "+" <|> chars "-") <> digits,
+   initialHexDigits = P.string "0x" <> hexDigits,
+   exponent = (P.string "e" <|> P.string "E") <> moptional (P.string "+" <|> P.string "-") <> digits,
+   hexExponent = (P.string "p" <|> P.string "P") <> moptional (P.string "+" <|> P.string "-") <> digits,
    name = do ignorable
              let isStartChar c = isLetter c || c == '_'
                  isNameChar c = isStartChar c || isDigit c
@@ -695,14 +676,14 @@ grammar LuaGrammar{..} = LuaGrammar{
                    in literalWith '"' <|> 
                       literalWith '\'' <|> 
                       string "!" *> longBracket,
-   longBracket = do skip (token "[")
+   longBracket = do void (token "[")
                     equalSigns <- takeCharsWhile (== '=')
-                    skip (token "[")
-                    skip (token "\n") <|> notFollowedBy (token "\n")
+                    void (token "[")
+                    void (token "\n") <|> notFollowedBy (token "\n")
                     let terminator = token "]" *> string equalSigns *> token "]"
                     many (notFollowedBy terminator
                           *> satisfyChar (const True)) <* terminator,
-   comment = string "--" *> (toString (const "") <$> takeCharsWhile (/= '\n') <* (skip (char '\n') <|> endOfInput) <|>
+   comment = string "--" *> (toString (const "") <$> takeCharsWhile (/= '\n') <* (void (char '\n') <|> endOfInput) <|>
                              longBracket)
    }
 
