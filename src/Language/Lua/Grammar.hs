@@ -13,8 +13,9 @@ import Text.Grampa
 import Language.Lua.Syntax
 import Language.Lua.Parser.Internal (NodeInfo(..))
 import Text.Parser.Char (alphaNum, char, digit, hexDigit)
-import Text.Parser.Combinators (count, sepBy, skipMany)
 import qualified Text.Parser.Char as P
+import Text.Parser.Combinators (count, sepBy, skipMany)
+import Text.Parser.Expression (Assoc(..), Operator(..), buildExpressionParser)
 
 import Debug.Trace (trace)
 
@@ -32,8 +33,8 @@ data LuaGrammar a f = LuaGrammar{
    namelist :: f (IdentList1 a),
    explist :: f (ExpressionList a),
    explist1 :: f (ExpressionList1 a),
-   exp, andexp, compexp, bitorexp, bitxorexp, bitandexp, shiftexp,
-   concatexp, sumexp, productexp, factorexp, expexp, primaryexp :: f (Expression a),
+   exp :: f (Expression a),
+   primaryexp :: f (Expression a),
    prefixexp :: f (PrefixExpression a),
    functioncall :: f (FunctionCall a),
    args :: f (FunctionArgs a),
@@ -71,17 +72,6 @@ instance Functor1 (LuaGrammar a) where
       explist = f (explist g),
       explist1 = f (explist1 g),
       exp = f (exp g),
-      andexp = f (andexp g),
-      compexp = f (compexp g),
-      bitorexp = f (bitorexp g),
-      bitxorexp = f (bitxorexp g),
-      bitandexp = f (bitandexp g),
-      shiftexp = f (shiftexp g),
-      concatexp = f (concatexp g),
-      sumexp = f (sumexp g),
-      productexp = f (productexp g),
-      factorexp = f (factorexp g),
-      expexp = f (expexp g),
       primaryexp = f (primaryexp g),
       prefixexp = f (prefixexp g),
       functioncall = f (functioncall g),
@@ -120,17 +110,6 @@ instance Apply1 (LuaGrammar a) where
       explist = explist f `apply1` explist g,
       explist1 = explist1 f `apply1` explist1 g,
       exp = exp f `apply1` exp g,
-      andexp = andexp f `apply1` andexp g,
-      compexp = compexp f `apply1` compexp g,
-      bitorexp = bitorexp f `apply1` bitorexp g,
-      bitxorexp = bitxorexp f `apply1` bitxorexp g,
-      bitandexp = bitandexp f `apply1` bitandexp g,
-      shiftexp = shiftexp f `apply1` shiftexp g,
-      concatexp = concatexp f `apply1` concatexp g,
-      sumexp = sumexp f `apply1` sumexp g,
-      productexp = productexp f `apply1` productexp g,
-      factorexp = factorexp f `apply1` factorexp g,
-      expexp = expexp f `apply1` expexp g,
       primaryexp = primaryexp f `apply1` primaryexp g,
       prefixexp = prefixexp f `apply1` prefixexp g,
       functioncall = functioncall f `apply1` functioncall g,
@@ -169,17 +148,6 @@ instance Alternative1 (LuaGrammar a) where
       explist = empty,
       explist1 = empty,
       exp = empty,
-      andexp = empty,
-      compexp = empty,
-      bitorexp = empty,
-      bitxorexp = empty,
-      bitandexp = empty,
-      shiftexp = empty,
-      concatexp = empty,
-      sumexp = empty,
-      productexp = empty,
-      factorexp = empty,
-      expexp = empty,
       primaryexp = empty,
       prefixexp = empty,
       functioncall = empty,
@@ -216,17 +184,6 @@ instance Alternative1 (LuaGrammar a) where
       explist = explist f <|> explist g,
       explist1 = explist1 f <|> explist1 g,
       exp = exp f <|> exp g,
-      andexp = andexp f <|> andexp g,
-      compexp = compexp f <|> compexp g,
-      bitorexp = bitorexp f <|> bitorexp g,
-      bitxorexp = bitxorexp f <|> bitxorexp g,
-      bitandexp = bitandexp f <|> bitandexp g,
-      shiftexp = shiftexp f <|> shiftexp g,
-      concatexp = concatexp f <|> concatexp g,
-      sumexp = sumexp f <|> sumexp g,
-      productexp = productexp f <|> productexp g,
-      factorexp = factorexp f <|> factorexp g,
-      expexp = expexp f <|> expexp g,
       primaryexp = primaryexp f <|> primaryexp g,
       prefixexp = prefixexp f <|> prefixexp g,
       functioncall = functioncall f <|> functioncall g,
@@ -265,17 +222,6 @@ instance Foldable1 (LuaGrammar a) where
       f (explist g) <>
       f (explist1 g) <>
       f (exp g) <>
-      f (andexp g) <>
-      f (compexp g) <>
-      f (bitorexp g) <>
-      f (bitxorexp g) <>
-      f (bitandexp g) <>
-      f (shiftexp g) <>
-      f (concatexp g) <>
-      f (sumexp g) <>
-      f (productexp g) <>
-      f (factorexp g) <>
-      f (expexp g) <>
       f (primaryexp g) <>
       f (prefixexp g) <>
       f (functioncall g) <>
@@ -315,17 +261,6 @@ instance Traversable1 (LuaGrammar a) where
       f (explist g) <*>
       f (explist1 g) <*>
       f (exp g) <*>
-      f (andexp g) <*>
-      f (compexp g) <*>
-      f (bitorexp g) <*>
-      f (bitxorexp g) <*>
-      f (bitandexp g) <*>
-      f (shiftexp g) <*>
-      f (concatexp g) <*>
-      f (sumexp g) <*>
-      f (productexp g) <*>
-      f (factorexp g) <*>
-      f (expexp g) <*>
       f (primaryexp g) <*>
       f (prefixexp g) <*>
       f (functioncall g) <*>
@@ -364,17 +299,6 @@ instance Reassemblable (LuaGrammar a) where
       explist = f explist g,
       explist1 = f explist1 g,
       exp = f exp g,
-      andexp = f andexp g,
-      compexp = f compexp g,
-      bitorexp = f bitorexp g,
-      bitxorexp = f bitxorexp g,
-      bitandexp = f bitandexp g,
-      shiftexp = f shiftexp g,
-      concatexp = f concatexp g,
-      sumexp = f sumexp g,
-      productexp = f productexp g,
-      factorexp = f factorexp g,
-      expexp = f expexp g,
       primaryexp = f primaryexp g,
       prefixexp = f prefixexp g,
       functioncall = f functioncall g,
@@ -413,17 +337,6 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
       "  explist = " ++ showsPrec1 prec (explist g) "\n" ++
       "  explist1 = " ++ showsPrec1 prec (explist1 g) "\n" ++
       "  exp = " ++ showsPrec1 prec (exp g) "\n" ++
-      "  andexp = " ++ showsPrec1 prec (andexp g) "\n" ++
-      "  compexp = " ++ showsPrec1 prec (compexp g) "\n" ++
-      "  bitorexp = " ++ showsPrec1 prec (bitorexp g) "\n" ++
-      "  bitxorexp = " ++ showsPrec1 prec (bitxorexp g) "\n" ++
-      "  bitandexp = " ++ showsPrec1 prec (bitandexp g) "\n" ++
-      "  shiftexp = " ++ showsPrec1 prec (shiftexp g) "\n" ++
-      "  concatexp = " ++ showsPrec1 prec (concatexp g) "\n" ++
-      "  sumexp = " ++ showsPrec1 prec (sumexp g) "\n" ++
-      "  productexp = " ++ showsPrec1 prec (productexp g) "\n" ++
-      "  factorexp = " ++ showsPrec1 prec (factorexp g) "\n" ++
-      "  expexp = " ++ showsPrec1 prec (expexp g) "\n" ++
       "  primaryexp = " ++ showsPrec1 prec (primaryexp g) "\n" ++
       "  prefixexp = " ++ showsPrec1 prec (prefixexp g) "\n" ++
       "  functioncall = " ++ showsPrec1 prec (functioncall g) "\n" ++
@@ -524,40 +437,32 @@ grammar LuaGrammar{..} = LuaGrammar{
    explist = node ExpressionList <*> sepBy exp (symbol ","),
    explist1 = node ExpressionList1 <*> sepBy1 exp (symbol ","),
 
-   exp = andexp <|> 
-         flip <$> node Binop <*> exp <*> (node Or <* keyword "or") <*> andexp,
-   andexp = compexp <|> 
-            flip <$> node Binop <*> andexp <*> (node And <* keyword "and") <*> compexp,
-   compexp = bitorexp <|> 
-             flip <$> node Binop <*> compexp <*> (node Lt <* symbol "<") <*> bitorexp <|>
-             flip <$> node Binop <*> compexp <*> (node Gt <* symbol ">") <*> bitorexp <|>
-             flip <$> node Binop <*> compexp <*> (node Leq <* symbol "<=") <*> bitorexp <|>
-             flip <$> node Binop <*> compexp <*> (node Geq <* symbol ">=") <*> bitorexp <|>
-             flip <$> node Binop <*> compexp <*> (node Neq <* symbol "~=") <*> bitorexp <|>
-             flip <$> node Binop <*> compexp <*> (node Eq <* symbol "==") <*> bitorexp,
-   bitorexp = bitxorexp <|>
-              flip <$> node Binop <*> bitorexp <*> (node BitwiseOr <* symbol "|") <*> bitxorexp,
-   bitxorexp = bitandexp <|>
-               flip <$> node Binop <*> bitxorexp <*> (node BitwiseXor <* symbol "~") <*> bitandexp,
-   bitandexp = shiftexp <|>
-               flip <$> node Binop <*> bitandexp <*> (node BitwiseAnd <* symbol "&") <*> shiftexp,
-   shiftexp = concatexp <|>
-              flip <$> node Binop <*> shiftexp <*> (node Lshift <* symbol "<<") <*> concatexp <|>
-              flip <$> node Binop <*> shiftexp <*> (node Rshift <* symbol ">>") <*> concatexp,
-   concatexp = sumexp <|>
-               flip <$> node Binop <*> concatexp <*> (node Concat <* symbol "..") <*> sumexp,
-   sumexp = productexp <|>
-            flip <$> node Binop <*> sumexp <*> (node Plus <* symbol "+") <*> productexp <|>
-            flip <$> node Binop <*> sumexp <*> (node Minus <* symbol "-") <*> productexp,
-   productexp = factorexp <|>
-                flip <$> node Binop <*> productexp <*> (node Mult <* symbol "*") <*> factorexp <|>
-                flip <$> node Binop <*> productexp <*> (node FloatDiv <* symbol "/") <*> factorexp <|>
-                flip <$> node Binop <*> productexp <*> (node FloorDiv <* symbol "//") <*> factorexp <|>
-                flip <$> node Binop <*> productexp <*> (node Modulo <* symbol "%") <*> factorexp,
-   factorexp = expexp <|>
-               node Unop <*> unop <*> expexp,
-   expexp = primaryexp <|>
-            flip <$> node Binop <*> primaryexp <*> (node Exponent <* symbol "^") <*> expexp,
+   -- Operator precedence from 3.4.8
+   exp = let binary op = Infix (node Binop <*> op)
+             operators = [
+                [binary (node Or <* keyword "or") AssocLeft],
+                [binary (node And <* keyword "and") AssocLeft],
+                [binary (node Lt <* symbol "<") AssocLeft,
+                 binary (node Gt <* symbol ">") AssocLeft,
+                 binary (node Leq <* symbol "<=") AssocLeft,
+                 binary (node Geq <* symbol ">=") AssocLeft,
+                 binary (node Neq <* symbol "~=") AssocLeft,
+                 binary (node Eq <* symbol "==") AssocLeft],
+                [binary (node BitwiseOr <* symbol "|") AssocLeft],
+                [binary (node BitwiseXor <* symbol "~") AssocLeft],
+                [binary (node BitwiseAnd <* symbol "&") AssocLeft],
+                [binary (node Lshift <* symbol "<<") AssocLeft,
+                 binary (node Rshift <* symbol ">>") AssocLeft],
+                [binary (node Concat <* symbol "..") AssocRight],
+                [binary (node Plus <* symbol "+") AssocLeft,
+                 binary (node Minus <* symbol "-") AssocLeft],
+                [binary (node Mult <* symbol "*") AssocLeft,
+                 binary (node FloatDiv <* symbol "/") AssocLeft,
+                 binary (node FloorDiv <* symbol "//") AssocLeft,
+                 binary (node Modulo <* symbol "%") AssocLeft],
+                [Prefix (node Unop <*> unop)],
+                [binary (node Exponent <* symbol "^") AssocRight]]
+         in buildExpressionParser operators primaryexp,
    primaryexp =
       node Nil <* keyword "nil" <|>
       node Bool <*> pure False <* keyword "false" <|>
