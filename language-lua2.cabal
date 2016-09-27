@@ -86,7 +86,7 @@ test-suite language-lua2-test
                       , lexer-applicative
                       , grampa == 0.1.*
                       , language-lua2
-                      , QuickCheck
+                      , QuickCheck >= 2.9
                       , semigroups
                       , srcloc
                       , tasty

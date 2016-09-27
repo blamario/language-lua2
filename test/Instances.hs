@@ -257,9 +257,6 @@ instance NFData a => NFData (Unop a)
 
 -- Orphans
 
-instance Arbitrary a => Arbitrary (NonEmpty a) where
-    arbitrary = NE.fromList <$> listOf1 arbitrary
-
 deriving instance Generic a => Generic (L a)
 instance (Generic a, NFData a) => NFData (L a)
 
