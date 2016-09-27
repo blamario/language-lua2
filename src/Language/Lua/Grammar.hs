@@ -3,7 +3,7 @@ module Language.Lua.Grammar where
 
 import Control.Applicative
 import Control.Monad (guard, void)
-import Data.Char (chr, isAlphaNum, isDigit, isHexDigit, isLetter, isSpace)
+import Data.Char (chr, isDigit, isLetter)
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.List.NonEmpty (NonEmpty(..), toList)
 import Data.Monoid ((<>))
@@ -12,7 +12,7 @@ import Numeric (readHex)
 import Text.Grampa
 import Language.Lua.Syntax
 import Language.Lua.Parser.Internal (NodeInfo(..))
-import Text.Parser.Char (char, spaces)
+import Text.Parser.Char (alphaNum, char, digit, hexDigit)
 import Text.Parser.Combinators (count, sepBy, skipMany)
 import qualified Text.Parser.Char as P
 
@@ -468,7 +468,7 @@ node :: MonoidNull t => (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
 node f = pure (f mempty)
 
 keyword :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
-keyword k = ignorable *> string k <* notFollowedBy (satisfyChar isAlphaNum)
+keyword k = ignorable *> string k <* notFollowedBy alphaNum
 
 symbol :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
 symbol s = ignorable *> string s
@@ -637,9 +637,9 @@ grammar LuaGrammar{..} = LuaGrammar{
               node Integer <*> initialHexDigits <|>
               node Float <*> (initialHexDigits <> P.string "." <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
-             <* notFollowedBy (satisfyChar isAlphaNum),
-   digits = some (satisfyChar isDigit),
-   hexDigits = some (satisfyChar isHexDigit),
+             <* notFollowedBy alphaNum,
+   digits = some digit,
+   hexDigits = some hexDigit,
    initialHexDigits = P.string "0x" <> hexDigits,
    exponent = (P.string "e" <|> P.string "E") <> moptional (P.string "+" <|> P.string "-") <> digits,
    hexExponent = (P.string "p" <|> P.string "P") <> moptional (P.string "+" <|> P.string "-") <> digits,
@@ -666,9 +666,7 @@ grammar LuaGrammar{..} = LuaGrammar{
                               "\n" <$ token "\n" <|>
                               ((:[]) . chr) <$> (token "d" *> (read <$> upto 3 digit) <|>
                                                  token "x" *> ((fst . head . readHex) <$> count 2 hexDigit)) <|>
-                              "" <$ token "z" <* skipCharsWhile isSpace)
-                       digit = satisfyChar isDigit
-                       hexDigit = satisfyChar isHexDigit
+                              "" <$ token "z" <* spaces)
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>
                                                           toString (const "") <$> takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
