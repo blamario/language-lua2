@@ -11,6 +11,8 @@ import Language.Lua.Token
 import Language.Lua.Syntax
 import Language.Lua.Parser (NodeInfo)
 
+import Text.Grampa (FailureInfo(..))
+
 import           Control.Applicative
 import           Control.DeepSeq
 import           Data.Char                  (isAsciiLower, isAsciiUpper, isDigit)
@@ -232,6 +234,8 @@ instance C a => Arbitrary (Unop a) where
 instance NFData NodeInfo
 instance NFData Token
 
+instance NFData FailureInfo
+
 instance NFData a => NFData (Ident a)
 instance NFData a => NFData (IdentList a)
 instance NFData a => NFData (IdentList1 a)
@@ -256,6 +260,8 @@ instance NFData a => NFData (Binop a)
 instance NFData a => NFData (Unop a)
 
 -- Orphans
+
+deriving instance Generic FailureInfo
 
 deriving instance Generic a => Generic (L a)
 instance (Generic a, NFData a) => NFData (L a)

@@ -9,13 +9,17 @@ import Data.List.NonEmpty (NonEmpty(..), toList)
 import Data.Monoid ((<>))
 import Data.Monoid.Textual (toString)
 import Numeric (readHex)
+
+import qualified Rank2
 import Text.Grampa
-import Language.Lua.Syntax
-import Language.Lua.Parser.Internal (NodeInfo(..))
+
 import Text.Parser.Char (alphaNum, char, digit, hexDigit)
 import qualified Text.Parser.Char as P
 import Text.Parser.Combinators (count, sepBy, skipMany)
 import Text.Parser.Expression (Assoc(..), Operator(..), buildExpressionParser)
+
+import Language.Lua.Syntax
+import Language.Lua.Parser.Internal (NodeInfo(..))
 
 import Debug.Trace (trace)
 
@@ -58,8 +62,8 @@ data LuaGrammar a f = LuaGrammar{
    exponent :: f String,
    hexExponent :: f String}
 
-instance Functor1 (LuaGrammar a) where
-   fmap1 f g = LuaGrammar{
+instance Rank2.Functor (LuaGrammar a) where
+   fmap f g = LuaGrammar{
       chunk = f (chunk g),
       block = f (block g),
       stat = f (stat g),
@@ -96,46 +100,46 @@ instance Functor1 (LuaGrammar a) where
       exponent = f (exponent g),
       hexExponent = f (exponent g)}
 
-instance Apply1 (LuaGrammar a) where
-   ap1 f g = LuaGrammar{
-      chunk = chunk f `apply1` chunk g,
-      block = block f `apply1` block g,
-      stat = stat f `apply1` stat g,
-      retstat = retstat f `apply1` retstat g,
-      label = label f `apply1` label g,
-      funcname = funcname f `apply1` funcname g,
-      varlist = varlist f `apply1` varlist g,
-      var = var f `apply1` var g,
-      namelist = namelist f `apply1` namelist g,
-      explist = explist f `apply1` explist g,
-      explist1 = explist1 f `apply1` explist1 g,
-      exp = exp f `apply1` exp g,
-      primaryexp = primaryexp f `apply1` primaryexp g,
-      prefixexp = prefixexp f `apply1` prefixexp g,
-      functioncall = functioncall f `apply1` functioncall g,
-      args = args f `apply1` args g,
-      functiondef = functiondef f `apply1` functiondef g,
-      funcbody = funcbody f `apply1` funcbody g,
-      parlist = parlist f `apply1` parlist g,
-      tableconstructor = tableconstructor f `apply1` tableconstructor g,
-      fieldlist = fieldlist f `apply1` fieldlist g,
-      field = field f `apply1` field g,
-      fieldsep = fieldsep f `apply1` fieldsep g,
-      binop = binop f `apply1` binop g,
-      unop = unop f `apply1` unop g,
-      literalString = literalString f `apply1` literalString g,
-      longBracket = longBracket f `apply1` longBracket g,
-      comment = comment f `apply1` comment g,
-      numeral = numeral f `apply1` numeral g,
-      name = name f `apply1` name g,
-      digits = digits f `apply1` digits g,
-      hexDigits = hexDigits f `apply1` hexDigits g,
-      initialHexDigits = initialHexDigits f `apply1` initialHexDigits g,
-      exponent = exponent f `apply1` exponent g,
-      hexExponent = exponent f `apply1` exponent g}
+instance Rank2.Apply (LuaGrammar a) where
+   ap f g = LuaGrammar{
+      chunk = chunk f `Rank2.apply` chunk g,
+      block = block f `Rank2.apply` block g,
+      stat = stat f `Rank2.apply` stat g,
+      retstat = retstat f `Rank2.apply` retstat g,
+      label = label f `Rank2.apply` label g,
+      funcname = funcname f `Rank2.apply` funcname g,
+      varlist = varlist f `Rank2.apply` varlist g,
+      var = var f `Rank2.apply` var g,
+      namelist = namelist f `Rank2.apply` namelist g,
+      explist = explist f `Rank2.apply` explist g,
+      explist1 = explist1 f `Rank2.apply` explist1 g,
+      exp = exp f `Rank2.apply` exp g,
+      primaryexp = primaryexp f `Rank2.apply` primaryexp g,
+      prefixexp = prefixexp f `Rank2.apply` prefixexp g,
+      functioncall = functioncall f `Rank2.apply` functioncall g,
+      args = args f `Rank2.apply` args g,
+      functiondef = functiondef f `Rank2.apply` functiondef g,
+      funcbody = funcbody f `Rank2.apply` funcbody g,
+      parlist = parlist f `Rank2.apply` parlist g,
+      tableconstructor = tableconstructor f `Rank2.apply` tableconstructor g,
+      fieldlist = fieldlist f `Rank2.apply` fieldlist g,
+      field = field f `Rank2.apply` field g,
+      fieldsep = fieldsep f `Rank2.apply` fieldsep g,
+      binop = binop f `Rank2.apply` binop g,
+      unop = unop f `Rank2.apply` unop g,
+      literalString = literalString f `Rank2.apply` literalString g,
+      longBracket = longBracket f `Rank2.apply` longBracket g,
+      comment = comment f `Rank2.apply` comment g,
+      numeral = numeral f `Rank2.apply` numeral g,
+      name = name f `Rank2.apply` name g,
+      digits = digits f `Rank2.apply` digits g,
+      hexDigits = hexDigits f `Rank2.apply` hexDigits g,
+      initialHexDigits = initialHexDigits f `Rank2.apply` initialHexDigits g,
+      exponent = exponent f `Rank2.apply` exponent g,
+      hexExponent = exponent f `Rank2.apply` exponent g}
 
-instance Alternative1 (LuaGrammar a) where
-   empty1 = LuaGrammar{
+instance Rank2.Alternative (LuaGrammar a) where
+   empty = LuaGrammar{
       chunk = empty,
       block = empty,
       stat = empty,
@@ -171,7 +175,7 @@ instance Alternative1 (LuaGrammar a) where
       initialHexDigits = empty,
       exponent = empty,
       hexExponent = empty}
-   choose1 f g = LuaGrammar{
+   choose f g = LuaGrammar{
       chunk = chunk f <|> chunk g,
       block = block f <|> block g,
       stat = stat f <|> stat g,
@@ -208,8 +212,8 @@ instance Alternative1 (LuaGrammar a) where
       exponent = exponent f <|> exponent g,
       hexExponent = exponent f <|> exponent g}
 
-instance Foldable1 (LuaGrammar a) where
-   foldMap1 f g =
+instance Rank2.Foldable (LuaGrammar a) where
+   foldMap f g =
       f (chunk g) <>
       f (block g) <>
       f (stat g) <>
@@ -246,8 +250,8 @@ instance Foldable1 (LuaGrammar a) where
       f (exponent g) <>
       f (hexExponent g)
 
-instance Traversable1 (LuaGrammar a) where
-   traverse1 f g =
+instance Rank2.Traversable (LuaGrammar a) where
+   traverse f g =
       LuaGrammar <$>
       f (chunk g) <*>
       f (block g) <*>
@@ -285,7 +289,7 @@ instance Traversable1 (LuaGrammar a) where
       f (exponent g) <*>
       f (hexExponent g)
 
-instance Reassemblable (LuaGrammar a) where
+instance Rank2.Reassemblable (LuaGrammar a) where
    reassemble f g = LuaGrammar{
       chunk = f chunk g,
       block = f block g,
@@ -364,13 +368,13 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
 moptional :: (MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
 moptional p = p <|> pure mempty
 
-concatMany :: (Functor1 g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
+concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
 concatMany p = moptional (p <> concatMany p)
 
 ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
 ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
 
-upto :: (Functor1 g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
+upto :: (Rank2.Functor g, MonoidNull t) => Int -> Parser g t x -> Parser g t [x]
 upto n p | n > 0 = moptional ((:) <$> p <*> upto (n-1) p)
          | otherwise = pure []
 
@@ -590,6 +594,6 @@ grammar LuaGrammar{..} = LuaGrammar{
                              longBracket)
    }
 
-traceRest :: Functor1 g => String -> Parser g String ()
+traceRest :: Rank2.Functor g => String -> Parser g String ()
 --traceRest msg = pure ()
 traceRest msg = lookAhead (takeCharsWhile (const True)) >>= \s-> trace ("[[" ++ msg ++ ":" ++ s ++ "]]") (pure ())

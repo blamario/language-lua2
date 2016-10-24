@@ -218,14 +218,14 @@ parserTests = testGroup "parser tests"
 grammarTests :: TestTree
 grammarTests = testGroup "grammar tests"
   [ testCase "sepBy 0" $ do
-      [] @?= parseAll luaGrammar namelist ""
+      Right [] @?= parseAll luaGrammar namelist ""
   , testCase "sepBy 1" $ do
-      let [is] = parseAll luaGrammar namelist ("hi" :: String)
+      let Right [is] = parseAll luaGrammar namelist ("hi" :: String)
           loc1 = NoLoc
       is @?= IdentList1 (NodeInfo loc1 mempty)
                         [Ident (NodeInfo loc1 mempty) "hi"]
   , testCase "sepBy 2" $ do
-      let [is] = parseAll luaGrammar namelist "hi,ho"
+      let Right [is] = parseAll luaGrammar namelist "hi,ho"
           loc1 = NoLoc -- "hi"
           loc2 = NoLoc -- ","
           loc3 = NoLoc -- "ho"
@@ -234,7 +234,7 @@ grammarTests = testGroup "grammar tests"
                         , Ident (NodeInfo loc3 mempty) "ho"
                         ]
   , testCase "sepBy 3" $ do
-      let [is] = parseAll luaGrammar namelist "hi,ho,ha"
+      let Right [is] = parseAll luaGrammar namelist "hi,ho,ha"
           loc1 = NoLoc -- "hi"
           loc2 = NoLoc -- ","
           loc3 = NoLoc -- "ho"
@@ -246,7 +246,7 @@ grammarTests = testGroup "grammar tests"
                         , Ident (NodeInfo loc5 mempty) "ha"
                         ]
   , testCase "field list 1" $ do
-      let [fs] = parseAll luaGrammar fieldlist "[\"a\"]=b"
+      let Right [fs] = parseAll luaGrammar fieldlist "[\"a\"]=b"
           loc1 = NoLoc -- "["
           loc2 = NoLoc -- '"a"'
           loc3 = NoLoc -- "]"
@@ -264,12 +264,12 @@ grammarTests = testGroup "grammar tests"
                                           (Ident b_info "b")))) ]
 
   , testCase "param list" $ do
-      let [p] = parseAll luaGrammar parlist "..."
+      let Right [p] = parseAll luaGrammar parlist "..."
           loc = NoLoc
       p @?= ParamListVararg (NodeInfo loc mempty)
 
   , testCase "param list 2" $ do
-      let [p] = parseAll luaGrammar parlist "foo, bar"
+      let Right [p] = parseAll luaGrammar parlist "foo, bar"
           loc1 = NoLoc
           loc2 = NoLoc
           loc3 = NoLoc
