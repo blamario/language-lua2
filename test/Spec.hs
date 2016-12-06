@@ -218,12 +218,11 @@ parserTests = testGroup "parser tests"
 grammarTests :: TestTree
 grammarTests = testGroup "grammar tests"
   [ testCase "sepBy 0" $ do
-      Right [] @?= parseAll luaGrammar namelist ""
+      parseAll luaGrammar namelist "" @?= Left (0,["satisfyChar"])
   , testCase "sepBy 1" $ do
-      let Right [is] = parseAll luaGrammar namelist ("hi" :: String)
-          loc1 = NoLoc
-      is @?= IdentList1 (NodeInfo loc1 mempty)
-                        [Ident (NodeInfo loc1 mempty) "hi"]
+      let loc1 = NoLoc
+      parseAll luaGrammar namelist ("hi" :: String)
+         @?= Right [IdentList1 (NodeInfo loc1 mempty) [Ident (NodeInfo loc1 mempty) "hi"]]
   , testCase "sepBy 2" $ do
       let Right [is] = parseAll luaGrammar namelist "hi,ho"
           loc1 = NoLoc -- "hi"
