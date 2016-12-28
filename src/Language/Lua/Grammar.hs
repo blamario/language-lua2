@@ -14,7 +14,7 @@ import qualified Rank2
 import qualified Rank2.TH
 import Text.Grampa
 
-import Text.Parser.Char (alphaNum, char, digit, hexDigit)
+import Text.Parser.Char (alphaNum, anyChar, char, digit, hexDigit)
 import qualified Text.Parser.Char as P
 import Text.Parser.Combinators (count, sepBy, skipMany)
 import Text.Parser.Expression (Assoc(..), Operator(..), buildExpressionParser)
@@ -182,28 +182,28 @@ grammar LuaGrammar{..} = LuaGrammar{
    -- Operator precedence from 3.4.8
    exp = let binary op = Infix (node Binop <*> op)
              operators = [
-                [binary (node Or <* keyword "or") AssocLeft],
-                [binary (node And <* keyword "and") AssocLeft],
+                [binary (node Exponent <* symbol "^") AssocRight],
+                [Prefix (node Unop <*> unop)],
+                [binary (node Mult <* symbol "*") AssocLeft,
+                 binary (node FloatDiv <* symbol "/") AssocLeft,
+                 binary (node FloorDiv <* symbol "//") AssocLeft,
+                 binary (node Modulo <* symbol "%") AssocLeft],
+                [binary (node Plus <* symbol "+") AssocLeft,
+                 binary (node Minus <* symbol "-") AssocLeft],
+                [binary (node Concat <* symbol "..") AssocRight],
+                [binary (node Lshift <* symbol "<<") AssocLeft,
+                 binary (node Rshift <* symbol ">>") AssocLeft],
+                [binary (node BitwiseAnd <* symbol "&") AssocLeft],
+                [binary (node BitwiseXor <* symbol "~") AssocLeft],
+                [binary (node BitwiseOr <* symbol "|") AssocLeft],
                 [binary (node Lt <* symbol "<") AssocLeft,
                  binary (node Gt <* symbol ">") AssocLeft,
                  binary (node Leq <* symbol "<=") AssocLeft,
                  binary (node Geq <* symbol ">=") AssocLeft,
                  binary (node Neq <* symbol "~=") AssocLeft,
                  binary (node Eq <* symbol "==") AssocLeft],
-                [binary (node BitwiseOr <* symbol "|") AssocLeft],
-                [binary (node BitwiseXor <* symbol "~") AssocLeft],
-                [binary (node BitwiseAnd <* symbol "&") AssocLeft],
-                [binary (node Lshift <* symbol "<<") AssocLeft,
-                 binary (node Rshift <* symbol ">>") AssocLeft],
-                [binary (node Concat <* symbol "..") AssocRight],
-                [binary (node Plus <* symbol "+") AssocLeft,
-                 binary (node Minus <* symbol "-") AssocLeft],
-                [binary (node Mult <* symbol "*") AssocLeft,
-                 binary (node FloatDiv <* symbol "/") AssocLeft,
-                 binary (node FloorDiv <* symbol "//") AssocLeft,
-                 binary (node Modulo <* symbol "%") AssocLeft],
-                [Prefix (node Unop <*> unop)],
-                [binary (node Exponent <* symbol "^") AssocRight]]
+                [binary (node And <* keyword "and") AssocLeft],
+                [binary (node Or <* keyword "or") AssocLeft]]
          in buildExpressionParser operators primaryexp,
    primaryexp =
       node Nil <* keyword "nil" <|>
@@ -240,7 +240,7 @@ grammar LuaGrammar{..} = LuaGrammar{
 
    tableconstructor = node TableConstructor <* symbol "{" <*> fieldlist <* symbol "}",
 
-   fieldlist = node FieldList <*> sepBy field fieldsep,
+   fieldlist = node FieldList <*> ((toList <$> sepBy1 field fieldsep) <* optional fieldsep <|> pure []),
    field =
       node FieldExp <* symbol "[" <*> exp <* symbol "]" <* symbol "=" <*> exp <|>
       node FieldIdent <*> name <* symbol "=" <*> exp <|>
@@ -279,15 +279,17 @@ grammar LuaGrammar{..} = LuaGrammar{
 
    numeral = ignorable *>
              (node Integer <*> digits <|>
-              node Float <*> (digits <> P.string "." <> digits <> moptional exponent) <|>
+              node Float <*> (digits <> P.string "." <> moptional digits <> moptional exponent) <|>
+              node Float <*> (P.string "." <> digits <> moptional exponent) <|>
               node Float <*> (digits <> exponent) <|>
               node Integer <*> initialHexDigits <|>
-              node Float <*> (initialHexDigits <> P.string "." <> hexDigits <> moptional hexExponent) <|>
+              node Float <*> (initialHexDigits <> P.string "." <> moptional hexDigits <> moptional hexExponent) <|>
+              node Float <*> (P.string "." <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
              <* notFollowedBy alphaNum,
    digits = some digit,
    hexDigits = some hexDigit,
-   initialHexDigits = P.string "0x" <> hexDigits,
+   initialHexDigits = (P.string "0x" <|> P.string "0X") <> hexDigits,
    exponent = (P.string "e" <|> P.string "E") <> moptional (P.string "+" <|> P.string "-") <> digits,
    hexExponent = (P.string "p" <|> P.string "P") <> moptional (P.string "+" <|> P.string "-") <> digits,
    name = do ignorable
@@ -311,8 +313,9 @@ grammar LuaGrammar{..} = LuaGrammar{
                               "\"" <$ token "\"" <|>
                               "\'" <$ token "\'" <|>
                               "\n" <$ token "\n" <|>
-                              ((:[]) . chr) <$> (token "d" *> (read <$> upto 3 digit) <|>
-                                                 token "x" *> ((fst . head . readHex) <$> count 2 hexDigit)) <|>
+                              ((:[]) . chr) <$> (read <$> (count 3 digit <<|> count 2 digit <<|> count 1 digit) <|>
+                                                 token "x" *> ((fst . head . readHex) <$> count 2 hexDigit) <|>
+                                                 string "u{" *> ((fst . head . readHex) <$> some hexDigit) <* token "}") <|>
                               "" <$ token "z" <* spaces)
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>
@@ -320,14 +323,13 @@ grammar LuaGrammar{..} = LuaGrammar{
                                            <* char quote
                    in literalWith '"' <|> 
                       literalWith '\'' <|> 
-                      string "!" *> longBracket,
+                      longBracket,
    longBracket = do void (token "[")
                     equalSigns <- takeCharsWhile (== '=')
                     void (token "[")
                     void (token "\n") <|> notFollowedBy (token "\n")
                     let terminator = token "]" *> string equalSigns *> token "]"
-                    many (notFollowedBy terminator
-                          *> satisfyChar (const True)) <* terminator,
+                    many (notFollowedBy terminator *> anyChar) <* terminator,
    comment = string "--" *> (toString (const "") <$> takeCharsWhile (/= '\n') <* (void (char '\n') <|> endOfInput) <|>
                              longBracket)
    }

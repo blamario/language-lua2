@@ -293,7 +293,8 @@ grammarTests = testGroup "grammar tests"
     testFile fileName
        | ".lua" `isSuffixOf` fileName = testCase fileName (parseFile fileName)
     parseFile :: String -> IO ()
-    parseFile file = readFile file >>= evaluate . rnf . parseAll luaGrammar chunk
+    parseFile file = readFile file >>= evaluate . rnf . assertRight . parseAll luaGrammar chunk
+       where assertRight = either (\failure-> error ("Failed to parse file " ++ file ++ ": " ++ show failure)) id
 
 luaToString :: Chunk () -> String
 luaToString c = displayS (renderPretty 1.0 80 (pretty c)) ""
