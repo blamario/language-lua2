@@ -59,7 +59,6 @@ data LuaGrammar a f = LuaGrammar{
    name :: f (Ident a),
    digits :: f String,
    hexDigits :: f String,
-   initialDigits :: f String,
    initialHexDigits :: f String,
    exponent :: f String,
    hexExponent :: f String}
@@ -100,7 +99,6 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
       "  name = " ++ showsPrec1 prec (name g) "\n" ++
       "  digits = " ++ showsPrec1 prec (digits g) "\n" ++
       "  hexDigits = " ++ showsPrec1 prec (hexDigits g) "\n" ++
-      "  initialDigits = " ++ showsPrec1 prec (initialDigits g) "\n" ++
       "  initialHexDigits = " ++ showsPrec1 prec (initialHexDigits g) "\n" ++
       "  exponent = " ++ showsPrec1 prec (exponent g) "\n" ++
       "  hexExponent = " ++ showsPrec1 prec (hexExponent g) ("}" ++ rest)
@@ -121,9 +119,17 @@ sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 -- | Tweaked version of 'Text.Parser.Expression.buildExpressionParser' that allows chaining prefix operators with same
 -- precedence
 buildExpressionParser :: (Parsing m, Applicative m) => [[Operator m a]] -> m a -> m a
-buildExpressionParser operators simpleExpr
-    = foldl makeParser simpleExpr operators
-    where
+buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operators
+   where
+      prefixExpr = foldl makePrefixParser simpleExpr operators
+      makePrefixParser term ops =
+         let (_, _, _, prefix, postfix) = foldr splitOp ([],[],[],[],[]) ops
+             prefixOp   = choice prefix  <?> ""
+             postfixOp  = choice postfix <?> ""
+             termP         = (prefixFactor <|> term) <**> postfixFactor
+             prefixFactor  = prefixOp <*> (prefixFactor <|> makeParser term ops)
+             postfixFactor = (flip (.)) <$> postfixOp <*> postfixFactor <|> pure id
+         in termP <?> "operator"
       makeParser term ops
         = let (rassoc,lassoc,nassoc,prefix,postfix) = foldr splitOp ([],[],[],[],[]) ops
               rassocOp   = choice rassoc
@@ -138,9 +144,7 @@ buildExpressionParser operators simpleExpr
               ambiguousLeft     = ambiguous "left" lassocOp
               ambiguousNon      = ambiguous "non" nassocOp
 
-              termP         = prefixFactor <**> postfixFactor
-              prefixFactor  = prefixOp <*> prefixFactor <|> term
-              postfixFactor = (flip (.)) <$> postfixOp <*> postfixFactor <|> pure id
+              termP = term
 
               rassocP  = (flip <$> rassocOp <*> (termP <**> rassocP1)
                           <|> ambiguousLeft
@@ -159,7 +163,7 @@ buildExpressionParser operators simpleExpr
                               <|> ambiguousLeft
                               <|> ambiguousNon
                               <|> pure id)
-           in termP <**> (rassocP <|> lassocP <|> nassocP <|> pure id) <?> "operator"
+           in term <**> (rassocP <|> lassocP <|> nassocP <|> pure id) <?> "operator"
 
 
       splitOp (Infix op assoc) (rassoc,lassoc,nassoc,prefix,postfix)
@@ -198,7 +202,7 @@ luaGrammar = fixGrammar grammar
 
 grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) t
 grammar LuaGrammar{..} = LuaGrammar{
-   chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> optional (token "\n"))
+   chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> (void (token "\n") <|> endOfInput))
            *> block <* ignorable <* endOfInput,
    block = node Block <*> many stat <*> optional retstat,
    stat = node EmptyStmt <* symbol ";" <|>
@@ -245,7 +249,7 @@ grammar LuaGrammar{..} = LuaGrammar{
                  binary (node FloorDiv <* symbol "//") AssocLeft,
                  binary (node Modulo <* symbol "%") AssocLeft],
                 [binary (node Plus <* symbol "+") AssocLeft,
-                 binary (node Minus <* symbol "-") AssocLeft],
+                 binary (node Minus <* symbol "-" <* notFollowedBy (char '-')) AssocLeft],
                 [binary (node Concat <* symbol "..") AssocRight],
                 [binary (node Lshift <* symbol "<<") AssocLeft,
                  binary (node Rshift <* symbol ">>") AssocLeft],
@@ -269,7 +273,7 @@ grammar LuaGrammar{..} = LuaGrammar{
       node String <*> literalString <|>
       node Vararg <* symbol "..." <|>
       node FunDef <*> functiondef <|>
-      node PrefixExp <*> prefixexp <|>
+      node PrefixExp <*> prefixexp <* notFollowedBy (symbol "(") <|> -- fix the ambiguity from 3.3.1
       node TableCtor <*> tableconstructor,
 
    prefixexp =
@@ -306,7 +310,7 @@ grammar LuaGrammar{..} = LuaGrammar{
 
    binop =
       node Plus       <* symbol "+"    <|>
-      node Minus      <* symbol "-"    <|> 
+      node Minus      <* symbol "-" <* notFollowedBy (char '-') <|> 
       node Mult       <* symbol "*"    <|>
       node FloatDiv   <* symbol "/"    <|>
       node FloorDiv   <* symbol "//"   <|>
@@ -328,25 +332,24 @@ grammar LuaGrammar{..} = LuaGrammar{
       node Or         <* keyword "or",
 
    unop =
-      node Negate     <* symbol "-" <* notFollowedBy digit    <|>
+      node Negate     <* symbol "-" <* notFollowedBy (char '-') <|>  -- eliminate ambiguity
       node Not        <* keyword "not" <|>
       node Length     <* symbol "#"    <|>
       node BitwiseNot <* symbol "~",
 
    numeral = ignorable *>
-             (node Integer <*> initialDigits <|>
-              node Float <*> (initialDigits <> P.string "." <> moptional digits <> moptional exponent) <|>
+             (node Integer <*> digits <|>
+              node Float <*> (digits <> P.string "." <> moptional digits <> moptional exponent) <|>
               node Float <*> (P.string "." <> digits <> moptional exponent) <|>
-              node Float <*> (initialDigits <> exponent) <|>
+              node Float <*> (digits <> exponent) <|>
               node Integer <*> initialHexDigits <|>
               node Float <*> (initialHexDigits <> P.string "." <> moptional hexDigits <> moptional hexExponent) <|>
-              node Float <*> (P.string "." <> hexDigits <> moptional hexExponent) <|>
+              node Float <*> ((P.string "0x." <|> P.string "0X.") <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
              <* notFollowedBy alphaNum,
    digits = some digit,
    hexDigits = some hexDigit,
-   initialDigits = moptional (P.string "-") <> digits,
-   initialHexDigits = moptional (P.string "-") <> (P.string "0x" <|> P.string "0X") <> hexDigits,
+   initialHexDigits = (P.string "0x" <|> P.string "0X") <> hexDigits,
    exponent = (P.string "e" <|> P.string "E") <> moptional (P.string "+" <|> P.string "-") <> digits,
    hexExponent = (P.string "p" <|> P.string "P") <> moptional (P.string "+" <|> P.string "-") <> digits,
    name = do ignorable
