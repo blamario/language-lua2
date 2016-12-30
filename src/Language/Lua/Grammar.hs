@@ -118,7 +118,7 @@ sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
 -- | Tweaked version of 'Text.Parser.Expression.buildExpressionParser' that allows chaining prefix operators with same
 -- precedence
-buildExpressionParser :: (Parsing m, Applicative m) => [[Operator m a]] -> m a -> m a
+buildExpressionParser :: Parsing m => [[Operator m a]] -> m a -> m a
 buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operators
    where
       prefixExpr = foldl makePrefixParser simpleExpr operators
@@ -127,16 +127,14 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
              prefixOp   = choice prefix  <?> ""
              postfixOp  = choice postfix <?> ""
              termP         = (prefixFactor <|> term) <**> postfixFactor
-             prefixFactor  = prefixOp <*> (prefixFactor <|> makeParser term ops)
-             postfixFactor = (flip (.)) <$> postfixOp <*> postfixFactor <|> pure id
+             prefixFactor  = foldr (.) id <$> some prefixOp <*> makeParser term ops
+             postfixFactor = flip (.) <$> postfixOp <*> postfixFactor <|> pure id
          in termP <?> "operator"
       makeParser term ops
-        = let (rassoc,lassoc,nassoc,prefix,postfix) = foldr splitOp ([],[],[],[],[]) ops
+        = let (rassoc,lassoc,nassoc,_prefix,_postfix) = foldr splitOp ([],[],[],[],[]) ops
               rassocOp   = choice rassoc
               lassocOp   = choice lassoc
               nassocOp   = choice nassoc
-              prefixOp   = choice prefix  <?> ""
-              postfixOp  = choice postfix <?> ""
 
               ambiguous assoc op = try (op *> empty <?> ("ambiguous use of a " ++ assoc ++ "-associative operator"))
 
