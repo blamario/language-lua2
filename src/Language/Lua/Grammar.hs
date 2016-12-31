@@ -22,8 +22,6 @@ import Text.Parser.Expression (Assoc(..), Operator(..))
 import Language.Lua.Syntax
 import Language.Lua.Parser.Internal (NodeInfo(..))
 
-import Debug.Trace (trace)
-
 import Prelude hiding (exp, exponent)
 
 data LuaGrammar a f = LuaGrammar{
@@ -103,7 +101,7 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
       "  exponent = " ++ showsPrec1 prec (exponent g) "\n" ++
       "  hexExponent = " ++ showsPrec1 prec (hexExponent g) ("}" ++ rest)
 
-moptional :: (MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
+moptional :: Monoid x => Parser g t x -> Parser g t x
 moptional p = p <|> pure mempty
 
 concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
@@ -112,7 +110,7 @@ concatMany p = moptional (p <> concatMany p)
 ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
 ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
 
-sepBy1 :: Monoid t => Parser g t x -> Parser g t sep -> Parser g t (NonEmpty x)
+sepBy1 :: Parser g t x -> Parser g t sep -> Parser g t (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
 
@@ -176,7 +174,7 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
       splitOp (Postfix op) (rassoc,lassoc,nassoc,prefix,postfix)
         = (rassoc,lassoc,nassoc,prefix,op:postfix)
 
-node :: MonoidNull t => (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
+node :: (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
 node f = pure (f mempty)
 
 keyword :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
@@ -391,7 +389,3 @@ grammar LuaGrammar{..} = LuaGrammar{
    comment = string "--" *> (toString (const "") <$> takeCharsWhile (/= '\n') <* (void (char '\n') <|> endOfInput) <|>
                              longBracket)
    }
-
-traceRest :: Rank2.Functor g => String -> Parser g String ()
---traceRest msg = pure ()
-traceRest msg = lookAhead (takeCharsWhile (const True)) >>= \s-> trace ("[[" ++ msg ++ ":" ++ s ++ "]]") (pure ())
