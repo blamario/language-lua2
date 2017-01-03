@@ -28,6 +28,7 @@ data LuaGrammar a f = LuaGrammar{
    chunk :: f (Block a),
    block :: f (Block a),
    stat :: f (Statement a),
+   stats :: f [Statement a],
    retstat :: f (ReturnStatement a),
    label :: f (Ident a),
    funcname :: f (FunctionName a),
@@ -200,7 +201,8 @@ grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInf
 grammar LuaGrammar{..} = LuaGrammar{
    chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> (void (token "\n") <|> endOfInput))
            *> block <* ignorable <* endOfInput,
-   block = node Block <*> many stat <*> optional retstat,
+   block = node Block <*> stats <*> optional retstat,
+   stats = (:) <$> stat <*> stats <|> pure [],
    stat = node EmptyStmt <* symbol ";" <|>
           node Assign <*> varlist <* symbol "=" <*> explist1 <|>
           node FunCall <*> functioncall <|>
@@ -351,8 +353,7 @@ grammar LuaGrammar{..} = LuaGrammar{
    name = do ignorable
              let isStartChar c = isLetter c || c == '_'
                  isNameChar c = isStartChar c || isDigit c
-             identifier <- ((:) <$> satisfyChar isStartChar <*> many (satisfyChar isNameChar))
-                           <* notFollowedBy (satisfyChar isNameChar)
+             identifier <- ((:) <$> satisfyChar isStartChar <*> (toString (const "") <$> takeCharsWhile isNameChar))
              guard (notElem identifier reservedKeywords)
              node Ident <*> pure identifier,
    literalString = ignorable *>
