@@ -25,11 +25,9 @@ import qualified Data.List.NonEmpty    as NE
 import           Data.Loc
 import           Data.Monoid
 import qualified Data.Sequence         as Seq
-import           Test.QuickCheck
 import           System.Directory (listDirectory)
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import qualified Test.Tasty.QuickCheck as QC
 
 main :: IO ()
 main = defaultMain $ testGroup "tests"

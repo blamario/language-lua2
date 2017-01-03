@@ -53,6 +53,7 @@ executable parse
   main-is:              Parse.hs
   build-depends:        base
                       , Earley
+                      , grampa
                       , lexer-applicative
                       , language-lua2
                       , optparse-applicative
