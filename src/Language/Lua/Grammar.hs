@@ -16,7 +16,7 @@ import Text.Grampa
 
 import Text.Parser.Char (alphaNum, anyChar, char, digit, hexDigit)
 import qualified Text.Parser.Char as P
-import Text.Parser.Combinators (choice, count, sepBy, skipMany)
+import Text.Parser.Combinators (choice, count, sepBy, skipMany, try)
 import Text.Parser.Expression (Assoc(..), Operator(..))
 
 import Language.Lua.Syntax
@@ -27,8 +27,8 @@ import Prelude hiding (exp, exponent)
 data LuaGrammar a f = LuaGrammar{
    chunk :: f (Block a),
    block :: f (Block a),
-   stat :: f (Statement a),
    stats :: f [Statement a],
+   stat :: f (Statement a),
    retstat :: f (ReturnStatement a),
    label :: f (Ident a),
    funcname :: f (FunctionName a),
@@ -68,6 +68,7 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
    showsPrec prec g rest = "LuaGrammar{" ++
       "  chunk = " ++ showsPrec1 prec (chunk g) "\n" ++
       "  block = " ++ showsPrec1 prec (block g) "\n" ++
+      "  stats = " ++ showsPrec1 prec (stats g) "\n" ++
       "  stat = " ++ showsPrec1 prec (stat g) "\n" ++
       "  retstat = " ++ showsPrec1 prec (retstat g) "\n" ++
       "  label = " ++ showsPrec1 prec (label g) "\n" ++
@@ -109,7 +110,7 @@ concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Parser g t x -> Parse
 concatMany p = moptional (p <> concatMany p)
 
 ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
-ignorable = spaces *> skipMany (comment luaGrammar *> spaces)
+ignorable = whiteSpace *> skipMany (comment luaGrammar *> whiteSpace)
 
 sepBy1 :: Parser g t x -> Parser g t sep -> Parser g t (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
@@ -373,7 +374,7 @@ grammar LuaGrammar{..} = LuaGrammar{
                               ((:[]) . chr) <$> (read <$> (count 3 digit <<|> count 2 digit <<|> count 1 digit) <|>
                                                  token "x" *> ((fst . head . readHex) <$> count 2 hexDigit) <|>
                                                  string "u{" *> ((fst . head . readHex) <$> some hexDigit) <* token "}") <|>
-                              "" <$ token "z" <* spaces)
+                              "" <$ token "z" <* whiteSpace)
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>
                                                           toString (const "") <$> takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
