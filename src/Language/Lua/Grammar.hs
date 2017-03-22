@@ -103,16 +103,16 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
       "  exponent = " ++ showsPrec1 prec (exponent g) "\n" ++
       "  hexExponent = " ++ showsPrec1 prec (hexExponent g) ("}" ++ rest)
 
-moptional :: Monoid x => Parser g t x -> Parser g t x
+moptional :: Monoid x => Analysis g t x -> Analysis g t x
 moptional p = p <|> pure mempty
 
-concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Parser g t x -> Parser g t x
+concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Analysis g t x -> Analysis g t x
 concatMany p = moptional (p <> concatMany p)
 
-ignorable :: (Eq t, Show t, TextualMonoid t) => Parser (LuaGrammar NodeInfo) t ()
+ignorable :: (Eq t, Show t, TextualMonoid t) => Analysis (LuaGrammar NodeInfo) t ()
 ignorable = whiteSpace *> skipMany (comment luaGrammar *> whiteSpace)
 
-sepBy1 :: Parser g t x -> Parser g t sep -> Parser g t (NonEmpty x)
+sepBy1 :: Analysis g t x -> Analysis g t sep -> Analysis g t (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
 
@@ -176,13 +176,13 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
       splitOp (Postfix op) (rassoc,lassoc,nassoc,prefix,postfix)
         = (rassoc,lassoc,nassoc,prefix,op:postfix)
 
-node :: (NodeInfo -> x) -> Parser (LuaGrammar NodeInfo) t x
+node :: (NodeInfo -> x) -> Analysis (LuaGrammar NodeInfo) t x
 node f = pure (f mempty)
 
-keyword :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
+keyword :: (Eq t, Show t, TextualMonoid t) => t -> Analysis (LuaGrammar NodeInfo) t t
 keyword k = ignorable *> string k <* notFollowedBy alphaNum
 
-symbol :: (Eq t, Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
+symbol :: (Eq t, Show t, TextualMonoid t) => t -> Analysis (LuaGrammar NodeInfo) t t
 symbol s = ignorable *> string s
 
 toExpList :: ExpressionList1 a -> ExpressionList a
@@ -195,10 +195,10 @@ reservedKeywords = ["and", "break", "do", "else", "elseif", "end",
                     "local", "nil", "not", "or", "repeat", "return",
                     "then", "true", "until", "while"]
 
-luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) t
-luaGrammar = fixGrammar grammar
+luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) Analysis t
+luaGrammar = fixGrammarAnalysis grammar
 
-grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) t
+grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) Analysis t
 grammar LuaGrammar{..} = LuaGrammar{
    chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> (void (token "\n") <|> endOfInput))
            *> block <* ignorable <* endOfInput,
