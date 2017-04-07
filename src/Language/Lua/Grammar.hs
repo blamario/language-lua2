@@ -1,4 +1,4 @@
-{-# Language OverloadedStrings, RecordWildCards, TemplateHaskell #-}
+{-# Language OverloadedStrings, RecordWildCards, ScopedTypeVariables, TemplateHaskell #-}
 module Language.Lua.Grammar where
 
 import Control.Applicative
@@ -103,22 +103,20 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
       "  exponent = " ++ showsPrec1 prec (exponent g) "\n" ++
       "  hexExponent = " ++ showsPrec1 prec (hexExponent g) ("}" ++ rest)
 
-moptional :: Monoid x => Analysis g t x -> Analysis g t x
+moptional :: (Monoid x, Alternative p) => p x -> p x
 moptional p = p <|> pure mempty
 
-concatMany :: (Rank2.Functor g, MonoidNull t, Monoid x) => Analysis g t x -> Analysis g t x
-concatMany p = moptional (p <> concatMany p)
+ignorable :: (Eq t, Show t, TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => 
+             p (LuaGrammar NodeInfo) t ()
+ignorable = whiteSpace *> skipMany (nonTerminal comment *> whiteSpace)
 
-ignorable :: (Eq t, Show t, TextualMonoid t) => Analysis (LuaGrammar NodeInfo) t ()
-ignorable = whiteSpace *> skipMany (comment luaGrammar *> whiteSpace)
-
-sepBy1 :: Analysis g t x -> Analysis g t sep -> Analysis g t (NonEmpty x)
+sepBy1 :: Alternative p => p x -> p sep -> p (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
 
--- | Tweaked version of 'Text.Parser.Expression.buildExpressionParser' that allows chaining prefix operators with same
+-- | Tweaked version of 'Text.Parser.Expression.buildExpressionParser' that allows chaining prefix operators of arbitrary
 -- precedence
-buildExpressionParser :: Parsing m => [[Operator m a]] -> m a -> m a
+buildExpressionParser :: forall m a. RecursiveParsing m => [[Operator m a]] -> m a -> m a
 buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operators
    where
       prefixExpr = foldl makePrefixParser simpleExpr operators
@@ -128,7 +126,7 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
              postfixOp  = choice postfix <?> ""
              termP         = (prefixFactor <|> term) <**> postfixFactor
              prefixFactor  = foldr (.) id <$> some prefixOp <*> makeParser term ops
-             postfixFactor = flip (.) <$> postfixOp <*> postfixFactor <|> pure id
+             postfixFactor = foldr (flip (.)) id <$> many postfixOp
          in termP <?> "operator"
       makeParser term ops
         = let (rassoc,lassoc,nassoc,_prefix,_postfix) = foldr splitOp ([],[],[],[],[]) ops
@@ -138,19 +136,20 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
 
               ambiguous assoc op = try (op *> empty <?> ("ambiguous use of a " ++ assoc ++ "-associative operator"))
 
+              ambiguousLeft, ambiguousNon, ambiguousRight :: m (x -> x)
               ambiguousRight    = ambiguous "right" rassocOp
               ambiguousLeft     = ambiguous "left" lassocOp
               ambiguousNon      = ambiguous "non" nassocOp
 
               termP = term
 
-              rassocP  = (flip <$> rassocOp <*> (termP <**> rassocP1)
+              rassocP  = (flip <$> rassocOp <*> (termP <**> recursive rassocP1)
                           <|> ambiguousLeft
                           <|> ambiguousNon)
 
               rassocP1 = rassocP <|> pure id
 
-              lassocP  = ((flip <$> lassocOp <*> termP) <**> ((.) <$> lassocP1)
+              lassocP  = ((flip <$> lassocOp <*> termP) <**> ((.) <$> recursive lassocP1)
                           <|> ambiguousRight
                           <|> ambiguousNon)
 
@@ -176,13 +175,16 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
       splitOp (Postfix op) (rassoc,lassoc,nassoc,prefix,postfix)
         = (rassoc,lassoc,nassoc,prefix,op:postfix)
 
-node :: (NodeInfo -> x) -> Analysis (LuaGrammar NodeInfo) t x
+node :: Applicative p => (NodeInfo -> x) -> p x
 node f = pure (f mempty)
 
-keyword :: (Eq t, Show t, TextualMonoid t) => t -> Analysis (LuaGrammar NodeInfo) t t
+keyword :: (Eq t, Show t, TextualMonoid t, CharParsing (p (LuaGrammar NodeInfo) t), 
+            GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => t -> p (LuaGrammar NodeInfo) t t
 keyword k = ignorable *> string k <* notFollowedBy alphaNum
 
-symbol :: (Eq t, Show t, TextualMonoid t) => t -> Analysis (LuaGrammar NodeInfo) t t
+symbol :: (Eq t, Show t, TextualMonoid t, Applicative (p (LuaGrammar NodeInfo) t), 
+           Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => 
+          t -> p (LuaGrammar NodeInfo) t t
 symbol s = ignorable *> string s
 
 toExpList :: ExpressionList1 a -> ExpressionList a
@@ -195,10 +197,10 @@ reservedKeywords = ["and", "break", "do", "else", "elseif", "end",
                     "local", "nil", "not", "or", "repeat", "return",
                     "then", "true", "until", "while"]
 
-luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) Analysis t
-luaGrammar = fixGrammarAnalysis grammar
+luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) AST t
+luaGrammar = fixGrammarAST grammar
 
-grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) Analysis t
+grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) AST t
 grammar LuaGrammar{..} = LuaGrammar{
    chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> (void (token "\n") <|> endOfInput))
            *> block <* ignorable <* endOfInput,
