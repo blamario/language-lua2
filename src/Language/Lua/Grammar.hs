@@ -198,7 +198,7 @@ reservedKeywords = ["and", "break", "do", "else", "elseif", "end",
                     "then", "true", "until", "while"]
 
 luaGrammar :: (Eq t, Show t, TextualMonoid t) => Grammar (LuaGrammar NodeInfo) AST t
-luaGrammar = fixGrammarAST grammar
+luaGrammar = fixGrammar grammar
 
 grammar :: (Eq t, Show t, TextualMonoid t) => GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) AST t
 grammar LuaGrammar{..} = LuaGrammar{
@@ -358,7 +358,8 @@ grammar LuaGrammar{..} = LuaGrammar{
                  isNameChar c = isStartChar c || isDigit c
              identifier <- ((:) <$> satisfyChar isStartChar <*> (toString (const "") <$> takeCharsWhile isNameChar))
              guard (notElem identifier reservedKeywords)
-             node Ident <*> pure identifier,
+             node Ident <*> pure identifier
+          <?> "name",
    literalString = ignorable *>
                    let escapeSequence = 
                           token "\\" 

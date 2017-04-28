@@ -217,7 +217,7 @@ parserTests = testGroup "parser tests"
 grammarTests :: TestTree
 grammarTests = testGroup "grammar tests"
   [ testCase "sepBy 0" $ do
-      namelist (parseAll luaGrammar "") @?= Compose (Left (ParseFailure 0 ["satisfyChar"]))
+      namelist (parseAll luaGrammar "") @?= Compose (Left (ParseFailure 0 ["name"]))
   , testCase "sepBy 1" $ do
       let loc1 = NoLoc
       namelist (parseAll luaGrammar ("hi" :: String))
