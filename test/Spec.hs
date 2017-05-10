@@ -14,7 +14,7 @@ import Language.Lua.Syntax
 import Language.Lua.Token
 
 import Language.Lua.Grammar
-import Text.Grampa (parseAll, ParseFailure(..))
+import Text.Grampa (ParseFailure(..), parseComplete)
 
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative ((<$))
@@ -217,13 +217,13 @@ parserTests = testGroup "parser tests"
 grammarTests :: TestTree
 grammarTests = testGroup "grammar tests"
   [ testCase "sepBy 0" $ do
-      namelist (parseAll luaGrammar "") @?= Compose (Left (ParseFailure 0 ["name"]))
+      namelist (parseComplete luaGrammar "") @?= Compose (Left (ParseFailure 0 ["name"]))
   , testCase "sepBy 1" $ do
       let loc1 = NoLoc
-      namelist (parseAll luaGrammar ("hi" :: String))
+      namelist (parseComplete luaGrammar ("hi" :: String))
          @?= Compose (Right [IdentList1 (NodeInfo loc1 mempty) [Ident (NodeInfo loc1 mempty) "hi"]])
   , testCase "sepBy 2" $ do
-      let Compose (Right [is]) = namelist (parseAll luaGrammar "hi,ho")
+      let Compose (Right [is]) = namelist (parseComplete luaGrammar "hi,ho")
           loc1 = NoLoc -- "hi"
           loc2 = NoLoc -- ","
           loc3 = NoLoc -- "ho"
@@ -232,7 +232,7 @@ grammarTests = testGroup "grammar tests"
                         , Ident (NodeInfo loc3 mempty) "ho"
                         ]
   , testCase "sepBy 3" $ do
-      let Compose (Right [is]) = namelist (parseAll luaGrammar "hi,ho,ha")
+      let Compose (Right [is]) = namelist (parseComplete luaGrammar "hi,ho,ha")
           loc1 = NoLoc -- "hi"
           loc2 = NoLoc -- ","
           loc3 = NoLoc -- "ho"
@@ -244,7 +244,7 @@ grammarTests = testGroup "grammar tests"
                         , Ident (NodeInfo loc5 mempty) "ha"
                         ]
   , testCase "field list 1" $ do
-      let Compose (Right [fs]) = fieldlist (parseAll luaGrammar "[\"a\"]=b")
+      let Compose (Right [fs]) = fieldlist (parseComplete luaGrammar "[\"a\"]=b")
           loc1 = NoLoc -- "["
           loc2 = NoLoc -- '"a"'
           loc3 = NoLoc -- "]"
@@ -262,12 +262,12 @@ grammarTests = testGroup "grammar tests"
                                           (Ident b_info "b")))) ]
 
   , testCase "param list" $ do
-      let Compose (Right [p]) = parlist (parseAll luaGrammar "...")
+      let Compose (Right [p]) = parlist (parseComplete luaGrammar "...")
           loc = NoLoc
       p @?= ParamListVararg (NodeInfo loc mempty)
 
   , testCase "param list 2" $ do
-      let Compose (Right [p]) = parlist (parseAll luaGrammar "foo, bar")
+      let Compose (Right [p]) = parlist (parseComplete luaGrammar "foo, bar")
           loc1 = NoLoc
           loc2 = NoLoc
           loc3 = NoLoc
@@ -291,7 +291,7 @@ grammarTests = testGroup "grammar tests"
     testFile fileName
        | ".lua" `isSuffixOf` fileName = testCase fileName (parseFile fileName)
     parseFile :: String -> IO ()
-    parseFile file = readFile file >>= evaluate . rnf . assertRight . getCompose . chunk . parseAll luaGrammar
+    parseFile file = readFile file >>= evaluate . rnf . assertRight . getCompose . chunk . parseComplete luaGrammar
        where assertRight = either (\failure-> error ("Failed to parse file " ++ file ++ ": " ++ show failure)) id
 
 luaToString :: Chunk () -> String
