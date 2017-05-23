@@ -29,8 +29,8 @@ library
   other-modules:        Language.Lua.Internal
   build-depends:        base >= 4.7 && < 5
                       , containers >= 0.5 && < 0.6
-                      , rank2 == 0.1.*
-                      , grampa == 0.1.*
+                      , rank2classes == 0.1.*
+                      , grammatical-parsers == 0.1.*
                       , monoid-subclasses < 0.6
                       , parsers < 0.13
                       , Earley >= 0.10 && < 0.12
@@ -54,7 +54,7 @@ executable parse
   main-is:              Parse.hs
   build-depends:        base
                       , Earley
-                      , grampa
+                      , grammatical-parsers
                       , lexer-applicative
                       , language-lua2
                       , optparse-applicative
@@ -86,7 +86,7 @@ test-suite language-lua2-test
                       , directory
                       , deepseq
                       , lexer-applicative
-                      , grampa == 0.1.*
+                      , grammatical-parsers == 0.1.*
                       , language-lua2
                       , QuickCheck >= 2.9
                       , semigroups
