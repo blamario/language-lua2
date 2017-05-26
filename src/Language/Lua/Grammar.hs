@@ -114,6 +114,8 @@ ignorable = whiteSpace *> skipMany (nonTerminal comment *> whiteSpace)
 sepBy1 :: Alternative p => p x -> p sep -> p (NonEmpty x)
 sepBy1 p sep = (:|) <$> p <*> many (sep *> p)
 
+upto :: (TextualMonoid s, MonoidParsing p) => Int -> (Char -> Bool) -> p s s
+upto n0 predicate = scanChars n0 (\n c-> if n > 0 && predicate c then Just (pred n) else Nothing)
 
 -- | Tweaked version of 'Text.Parser.Expression.buildExpressionParser' that allows chaining prefix operators of arbitrary
 -- precedence
@@ -377,9 +379,11 @@ grammar LuaGrammar{..} = LuaGrammar{
                               "\"" <$ token "\"" <|>
                               "\'" <$ token "\'" <|>
                               "\n" <$ token "\n" <|>
-                              ((:[]) . chr) <$> (read <$> (count 3 digit <<|> count 2 digit <<|> count 1 digit) <|>
+                              ((:[]) . chr) <$> (read <$> ((:) <$> digit <*> (toString (const "") <$> upto 2 isDigit))
+                                                 <|>
                                                  token "x" *> ((fst . head . readHex) <$> count 2 hexDigit) <|>
-                                                 string "u{" *> ((fst . head . readHex) <$> some hexDigit) <* token "}") <|>
+                                                 string "u{" *> ((fst . head . readHex) <$> some hexDigit) <* token "}")
+                                <|>
                               "" <$ token "z" <* whiteSpace)
                        literalWith quote = char quote
                                            *> concatMany (escapeSequence <|>

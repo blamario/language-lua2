@@ -8,9 +8,10 @@ import qualified Language.Lua.Grammar as Grammar
 import qualified Language.Lua.Parser as Parser
 
 import Control.Monad
+import Data.Functor.Compose (getCompose)
 import Data.Typeable (Typeable)
 import Options.Applicative
-import Text.Grampa (parseAll)
+import Text.Grampa (parseComplete)
 import Text.PrettyPrint.Leijen    (Pretty(..), displayS, renderPretty)
 
 data GrammarMode = ChunkMode | StatementMode | ExpressionMode
@@ -70,7 +71,7 @@ main' Opts{..} =
     go g f filename contents = do
         let Right [x] = case optsBackend 
                         of EarleyMode -> Right [Parser.parseLuaWith g filename contents]
-                           GrampaMode -> parseAll Grammar.luaGrammar f contents
+                           GrampaMode -> getCompose (f $ parseComplete Grammar.luaGrammar contents)
         if optsPretty
              then putStrLn $ displayS (renderPretty 1.0 80 (pretty x)) ""
              else print x
