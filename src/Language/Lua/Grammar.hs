@@ -107,7 +107,8 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
 moptional :: (Monoid x, Alternative p) => p x -> p x
 moptional p = p <|> pure mempty
 
-ignorable :: (TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => 
+ignorable :: (TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p,
+              GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) => 
              p (LuaGrammar NodeInfo) t ()
 ignorable = whiteSpace *> skipMany (nonTerminal comment *> whiteSpace)
 
@@ -182,12 +183,13 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
 node :: Applicative p => (NodeInfo -> x) -> p x
 node f = pure (f mempty)
 
-keyword :: (Show t, TextualMonoid t, CharParsing (p (LuaGrammar NodeInfo) t), 
-            GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => t -> p (LuaGrammar NodeInfo) t t
+keyword :: (Show t, TextualMonoid t, CharParsing (p (LuaGrammar NodeInfo) t), GrammarParsing p,
+            GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) =>
+           t -> p (LuaGrammar NodeInfo) t t
 keyword k = ignorable *> string k <* notFollowedBy alphaNum
 
-symbol :: (Show t, TextualMonoid t,
-           Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p, MonoidParsing (p (LuaGrammar NodeInfo))) => 
+symbol :: (Show t, TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t),
+           GrammarParsing p, GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) => 
           t -> p (LuaGrammar NodeInfo) t t
 symbol s = ignorable *> string s
 
