@@ -29,7 +29,7 @@ library
   other-modules:        Language.Lua.Internal
   build-depends:        base >= 4.7 && < 5
                       , containers >= 0.5 && < 0.6
-                      , rank2classes == 0.1.*
+                      , rank2classes < 1.0
                       , grammatical-parsers == 0.1.*
                       , monoid-subclasses < 0.6
                       , parsers < 0.13

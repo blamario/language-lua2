@@ -9,6 +9,7 @@ import qualified Language.Lua.Parser as Parser
 
 import Control.Monad
 import Data.Functor.Compose (getCompose)
+import Data.Monoid ((<>))
 import Data.Typeable (Typeable)
 import Options.Applicative
 import Text.Grampa (parseComplete)
@@ -68,10 +69,12 @@ main' Opts{..} =
     go :: (Show (f Parser.NodeInfo), Pretty (f Parser.NodeInfo), Typeable f) => 
           Parser.LuaGrammar f -> (forall x. Grammar.LuaGrammar Parser.NodeInfo x -> x (f Parser.NodeInfo))
           -> String -> String -> IO ()
-    go g f filename contents = do
-        let Right [x] = case optsBackend 
-                        of EarleyMode -> Right [Parser.parseLuaWith g filename contents]
-                           GrampaMode -> getCompose (f $ parseComplete Grammar.luaGrammar contents)
-        if optsPretty
-             then putStrLn $ displayS (renderPretty 1.0 80 (pretty x)) ""
-             else print x
+    go g f filename contents = case optsBackend 
+                               of EarleyMode -> succeed (Parser.parseLuaWith g filename contents)
+                                  GrampaMode -> case getCompose (f $ parseComplete Grammar.luaGrammar contents)
+                                                of Right [x] -> succeed x
+                                                   Right l@(x:_) -> putStrLn ("Ambiguous: " ++ show (length l) ++ " parses") >> succeed x
+                                                   Left err -> error (show err)
+    succeed x = if optsPretty
+                then putStrLn $ displayS (renderPretty 1.0 80 (pretty x)) ""
+                else print x

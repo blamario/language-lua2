@@ -107,9 +107,7 @@ instance (Show1 f, Show a) => Show (LuaGrammar a f) where
 moptional :: (Monoid x, Alternative p) => p x -> p x
 moptional p = p <|> pure mempty
 
-ignorable :: (TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t), GrammarParsing p,
-              GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) => 
-             p (LuaGrammar NodeInfo) t ()
+ignorable :: TextualMonoid t => Parser (LuaGrammar NodeInfo) t ()
 ignorable = whiteSpace *> skipMany (nonTerminal comment *> whiteSpace)
 
 sepBy1 :: Alternative p => p x -> p sep -> p (NonEmpty x)
@@ -183,15 +181,11 @@ buildExpressionParser operators simpleExpr = foldl makeParser prefixExpr operato
 node :: Applicative p => (NodeInfo -> x) -> p x
 node f = pure (f mempty)
 
-keyword :: (Show t, TextualMonoid t, CharParsing (p (LuaGrammar NodeInfo) t), GrammarParsing p,
-            GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) =>
-           t -> p (LuaGrammar NodeInfo) t t
-keyword k = ignorable *> string k <* notFollowedBy alphaNum
+keyword :: (Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
+keyword k = string k <* notFollowedBy alphaNum <* ignorable
 
-symbol :: (Show t, TextualMonoid t, Parsing (p (LuaGrammar NodeInfo) t),
-           GrammarParsing p, GrammarConstraint p (LuaGrammar NodeInfo), MonoidParsing (p (LuaGrammar NodeInfo))) => 
-          t -> p (LuaGrammar NodeInfo) t t
-symbol s = ignorable *> string s
+symbol :: (Show t, TextualMonoid t) => t -> Parser (LuaGrammar NodeInfo) t t
+symbol s = string s <* ignorable
 
 toExpList :: ExpressionList1 a -> ExpressionList a
 toExpList (ExpressionList1 a l) = ExpressionList a (toList l)
@@ -210,7 +204,7 @@ grammar :: (Eq t, Show t, TextualMonoid t) =>
            GrammarBuilder (LuaGrammar NodeInfo) (LuaGrammar NodeInfo) Parser t
 grammar LuaGrammar{..} = LuaGrammar{
    chunk = optional (token "#" *> takeCharsWhile (/= '\n') *> (void (token "\n") <|> endOfInput))
-           *> block <* ignorable <* endOfInput,
+           *> ignorable *> block <* endOfInput,
    block = node Block <*> stats <*> optional retstat,
    stats = (:) <$> stat <*> stats <|> pure [],
    stat = node EmptyStmt <* symbol ";" <|>
@@ -257,7 +251,7 @@ grammar LuaGrammar{..} = LuaGrammar{
                  binary (node FloorDiv <* symbol "//") AssocLeft,
                  binary (node Modulo <* symbol "%") AssocLeft],
                 [binary (node Plus <* symbol "+") AssocLeft,
-                 binary (node Minus <* symbol "-" <* notFollowedBy (char '-')) AssocLeft],
+                 binary (node Minus <* string "-" <* notFollowedBy (char '-') <* ignorable) AssocLeft],
                 [binary (node Concat <* symbol "..") AssocRight],
                 [binary (node Lshift <* symbol "<<") AssocLeft,
                  binary (node Rshift <* symbol ">>") AssocLeft],
@@ -318,7 +312,7 @@ grammar LuaGrammar{..} = LuaGrammar{
 
    binop =
       node Plus       <* symbol "+"    <|>
-      node Minus      <* symbol "-" <* notFollowedBy (char '-') <|> 
+      node Minus      <* string "-" <* notFollowedBy (char '-') <* ignorable <|> 
       node Mult       <* symbol "*"    <|>
       node FloatDiv   <* symbol "/"    <|>
       node FloorDiv   <* symbol "//"   <|>
@@ -340,13 +334,12 @@ grammar LuaGrammar{..} = LuaGrammar{
       node Or         <* keyword "or",
 
    unop =
-      node Negate     <* symbol "-" <* notFollowedBy (char '-') <|>  -- eliminate ambiguity
+      node Negate     <* string "-" <* notFollowedBy (char '-') <* ignorable <|>  -- eliminate ambiguity
       node Not        <* keyword "not" <|>
       node Length     <* symbol "#"    <|>
       node BitwiseNot <* symbol "~",
 
-   numeral = ignorable *>
-             (node Integer <*> digits <|>
+   numeral = (node Integer <*> digits <|>
               node Float <*> (digits <> P.string "." <> moptional digits <> moptional exponent) <|>
               node Float <*> (P.string "." <> digits <> moptional exponent) <|>
               node Float <*> (digits <> exponent) <|>
@@ -354,21 +347,20 @@ grammar LuaGrammar{..} = LuaGrammar{
               node Float <*> (initialHexDigits <> P.string "." <> moptional hexDigits <> moptional hexExponent) <|>
               node Float <*> ((P.string "0x." <|> P.string "0X.") <> hexDigits <> moptional hexExponent) <|>
               node Float <*> (initialHexDigits <> hexExponent))
-             <* notFollowedBy alphaNum,
+             <* notFollowedBy alphaNum <* ignorable,
    digits = some digit,
    hexDigits = some hexDigit,
    initialHexDigits = (P.string "0x" <|> P.string "0X") <> hexDigits,
    exponent = (P.string "e" <|> P.string "E") <> moptional (P.string "+" <|> P.string "-") <> digits,
    hexExponent = (P.string "p" <|> P.string "P") <> moptional (P.string "+" <|> P.string "-") <> digits,
-   name = do ignorable
-             let isStartChar c = isLetter c || c == '_'
+   name = do let isStartChar c = isLetter c || c == '_'
                  isNameChar c = isStartChar c || isDigit c
              identifier <- ((:) <$> satisfyChar isStartChar <*> (toString (const "") <$> takeCharsWhile isNameChar))
              guard (notElem identifier reservedKeywords)
+             ignorable
              node Ident <*> pure identifier
           <?> "name",
-   literalString = ignorable *>
-                   let escapeSequence = 
+   literalString = let escapeSequence = 
                           token "\\" 
                           *> ("\\" <$ token "\\" <|>
                               "\a" <$ token "a" <|>
@@ -391,9 +383,10 @@ grammar LuaGrammar{..} = LuaGrammar{
                                            *> concatMany (escapeSequence <|>
                                                           toString (const "") <$> takeCharsWhile1 (\c-> c /= '\\' && c /= quote)) 
                                            <* char quote
-                   in literalWith '"' <|> 
-                      literalWith '\'' <|> 
-                      longBracket,
+                   in (literalWith '"' <|> 
+                       literalWith '\'' <|> 
+                       longBracket)
+                      <* ignorable,
    longBracket = do void (token "[")
                     equalSigns <- takeCharsWhile (== '=')
                     void (token "[")
