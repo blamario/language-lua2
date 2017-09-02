@@ -30,7 +30,7 @@ library
   build-depends:        base >= 4.7 && < 5
                       , containers >= 0.5 && < 0.6
                       , rank2classes < 1.0
-                      , grammatical-parsers == 0.1.*
+                      , grammatical-parsers < 0.3
                       , monoid-subclasses < 0.6
                       , parsers < 0.13
                       , Earley >= 0.10 && < 0.12
@@ -86,7 +86,7 @@ test-suite language-lua2-test
                       , directory
                       , deepseq
                       , lexer-applicative
-                      , grammatical-parsers == 0.1.*
+                      , grammatical-parsers
                       , language-lua2
                       , QuickCheck >= 2.9
                       , semigroups
