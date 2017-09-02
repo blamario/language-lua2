@@ -204,15 +204,22 @@ parserTests = testGroup "parser tests"
 
     , testCase "parse 1.lua" (parseFile "test/samples/1.lua")
     , testCase "parse 2.lua" (parseFile "test/samples/2.lua")
+    , testCaseSteps "Lua 5.3.3 test suite" (testDir "test/lua-5.3.3-tests/")
 
     -- TODO: Make smarter shrinks and re-enable
     -- , QC.testProperty "Pretty-printer round-trip" (\luaAst -> luaFromString (luaToString luaAst) == Just luaAst)
     ]
  where
-  l :: String -> [L Token]
-  l = streamToList . runLexer luaLexer ""
-  parseFile :: String -> IO ()
-  parseFile file = readFile file >>= evaluate . rnf . parseLua file
+    l :: String -> [L Token]
+    l = streamToList . runLexer luaLexer ""
+    parseFile :: String -> IO ()
+    parseFile file = readFile file >>= evaluate . rnf . parseLua file
+    testDir dirName step = listDirectory dirName >>= mapM_ testFile
+       where testFile fileName
+                | ".lua" `isSuffixOf` fileName = step fileName >> parseFile (dirName <> fileName)
+                | otherwise = return ()
+    testFile fileName
+       | ".lua" `isSuffixOf` fileName = testCase fileName (parseFile fileName)
 
 grammarTests :: TestTree
 grammarTests = testGroup "grammar tests"
